@@ -8,8 +8,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-from auth_utils import verify_password, require_login, is_authenticated
-from memory import add_message, queue_prompt, get_db_connection
+from app.auth_utils import verify_password, require_login, is_authenticated
+from app.memory import add_message, queue_prompt, get_db_connection
 from pydantic import BaseModel
 from datetime import datetime
 from uuid import uuid4
