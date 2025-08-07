@@ -46,23 +46,17 @@
   const systemPrompt = document.getElementById('system-prompt');
   const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
   localStorage.setItem('session_id', sessionId);
+const loader = document.getElementById('loader');
 
-  function appendMessage(role, content) {
-    const div = document.createElement('div');
-    div.className = role === 'user' ? 'user mb-2' : 'assistant mb-2';
-    div.textContent = `${role}: ${content}`;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
-  }
+chatForm.onsubmit = async (e) => {
+  e.preventDefault();
+  const input = userInput.value.trim();
+  if (!input) return;
+  appendMessage('user', input);
+  userInput.value = '';
+  loader.classList.remove('hidden'); // 👈 Show spinner
 
-  chatForm.onsubmit = async (e) => {
-    e.preventDefault();
-    const input = userInput.value.trim();
-    if (!input) return;
-    appendMessage('user', input);
-    userInput.value = '';
-    loader.classList.remove('hidden');
-
+  try {
     const res = await fetch('/chat/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -75,12 +69,12 @@
     });
 
     const data = await res.json();
-      appendMessage('assistant', data.response || '[Error: No reply]');
-    } catch (err) {
-      appendMessage('assistant', '[Error: Request failed]');
-    } finally {
-      loader.classList.add('hidden'); // 👈 Hide spinner
-    }
-  };
+    appendMessage('assistant', data.response || '[Error: No reply]');
+  } catch (err) {
+    appendMessage('assistant', '[Error: Request failed]');
+  } finally {
+    loader.classList.add('hidden'); // 👈 Hide spinner
+  }
+};
 </script>
 {% endblock %}
