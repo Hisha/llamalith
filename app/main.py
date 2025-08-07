@@ -58,13 +58,14 @@ async def logout(request: Request):
 
 @app.post("/api/chat")
 async def chat_api(data: ChatRequest):
-    response = await run_model(
-        user_input=data.user_input,
-        model=data.model,
-        session_id=data.session_id,
-        system_prompt=data.system_prompt,
-    )
-    update_session_memory(data.session_id, data.user_input, response)
+    history = get_session_memory(data.session_id)
+    if data.system_prompt:
+        history.insert(0, {"role": "system", "content": data.system_prompt})
+    history.append({"role": "user", "content": data.user_input})
+
+    response = run_model(data.model, history)
+    update_session_memory(data.session_id, {"role": "user", "content": data.user_input})
+    update_session_memory(data.session_id, {"role": "assistant", "content": response})
     return {"response": response}
 
 @app.post("/login", response_class=HTMLResponse)
