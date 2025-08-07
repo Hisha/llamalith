@@ -1,6 +1,6 @@
 import multiprocessing
 import time
-from app.db import get_next_job, mark_job_done, save_assistant_message
+from app.memory import get_next_job, mark_job_done, save_assistant_message
 from app.model_runner import run_model
 
 def worker_loop(worker_id):
