@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from datetime import datetime
 import uvicorn
 
 from app.model_runner import run_model
@@ -25,7 +26,10 @@ class ChatRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def chat_ui(request: Request):
-    return templates.TemplateResponse("chat_page.html", {"request": request})
+    return templates.TemplateResponse("chat_page.html", {
+        "request": request,
+        "now": datetime.now  # 👈 injects `now` function
+    })
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
