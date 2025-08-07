@@ -25,11 +25,7 @@ class ChatRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def chat_ui(request: Request):
-    return templates.TemplateResponse("chat.html", {"request": request})
-
-@app.get("/chat", response_class=HTMLResponse)
-async def chat_ui(request: Request):
-    return templates.TemplateResponse("chat_page.html", {"request": request})
+    return templates.TemplateResponse("chat_html.html", {"request": request})
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
