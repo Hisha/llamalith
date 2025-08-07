@@ -27,26 +27,9 @@ class ChatRequest(BaseModel):
 async def chat_ui(request: Request):
     return templates.TemplateResponse("chat.html", {"request": request})
 
-@app.post("/api/chat")
-async def chat_api(data: ChatRequest):
-    # Load memory for session
-    history = get_session_memory(data.session_id)
-
-    # Build prompt
-    messages = []
-    if data.system_prompt:
-        messages.append({"role": "system", "content": data.system_prompt})
-    messages.extend(history)
-    messages.append({"role": "user", "content": data.user_input})
-
-    # Run model
-    output = run_model(data.model, messages)
-
-    # Update memory
-    update_session_memory(data.session_id, {"role": "user", "content": data.user_input})
-    update_session_memory(data.session_id, {"role": "assistant", "content": output})
-
-    return JSONResponse({"reply": output})
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_ui(request: Request):
+    return templates.TemplateResponse("chat_page.html", {"request": request})
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
