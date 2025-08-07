@@ -29,7 +29,7 @@ def get_model(model_key):
         LOADED_MODELS[model_key] = Llama(
             model_path=path,
             n_ctx=4096,
-            n_threads=28,
+            n_threads=24,
             n_batch=512,
             use_mmap=True,
             use_mlock=False
