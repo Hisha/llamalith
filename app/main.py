@@ -18,9 +18,6 @@ from app.memory import get_session_memory, update_session_memory
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 
-# Mount static files (JS/CSS)
-app.mount("/chat/static", StaticFiles(directory="app/static"), name="static")
-
 # Jinja2 templates for frontend
 templates = Jinja2Templates(directory="app/templates")
 
