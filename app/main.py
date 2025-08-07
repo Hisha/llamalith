@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from app.auth_utils import verify_password, require_login, is_authenticated
-from app.memory import add_message_to_conversation, queue_prompt, get_db_connection
+from app.memory import add_message, queue_prompt, get_db_connection
 from pydantic import BaseModel
 from datetime import datetime
 from uuid import uuid4
@@ -33,24 +33,6 @@ class ChatRequest(BaseModel):
     session_id: str
     system_prompt: str = ""
 
-def insert_user_message(conversation_id: str, content: str):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO messages (conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
-              (conversation_id, "user", content, datetime.utcnow().isoformat()))
-    conn.commit()
-    conn.close()
-
-def queue_chat_job(conversation_id: str, model: str, system_prompt: str):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    job_id = str(uuid.uuid4())
-    c.execute("INSERT INTO chat_queue (job_id, conversation_id, model, system_prompt, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-              (job_id, conversation_id, model, system_prompt, "queued", datetime.utcnow().isoformat()))
-    conn.commit()
-    conn.close()
-    return job_id
-
 #####################################################################################
 #                                   GET                                             #
 #####################################################################################
@@ -63,40 +45,37 @@ async def chat_ui(request: Request):
         "now": datetime.now  # 👈 injects `now` function
     })
 
-@app.get("/api/chat/status/{job_id}")
-async def check_job_status(job_id: int):
+@app.get("/api/status/{conversation_id}")
+async def check_status(conversation_id: str):
     conn = get_db_connection()
     c = conn.cursor()
-
-    c.execute("SELECT status FROM chat_queue WHERE id = ?", (job_id,))
+    c.execute("""
+        SELECT content
+        FROM messages
+        WHERE conversation_id = ? AND role = 'assistant'
+        ORDER BY timestamp DESC
+        LIMIT 1
+    """, (conversation_id,))
     row = c.fetchone()
-
-    if not row:
-        conn.close()
-        return JSONResponse(content={"error": "Job not found"}, status_code=404)
-
-    status = row[0]
-
-    if status == "done":
-        # Get latest assistant message
-        c.execute("""
-            SELECT content FROM messages
-            WHERE conversation_id = (
-                SELECT conversation_id FROM chat_queue WHERE id = ?
-            )
-            AND role = 'assistant'
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """, (job_id,))
-        assistant_row = c.fetchone()
-        conn.close()
-        return {
-            "status": "done",
-            "response": assistant_row[0] if assistant_row else "[No response]"
-        }
-
     conn.close()
-    return {"status": status}
+
+    return {"response": row[0] if row else None}
+
+@app.get("/api/status/{session_id}")
+async def check_status(session_id: str):
+    conn = sqlite3.connect("app/memory.db")
+    c = conn.cursor()
+    c.execute("""
+        SELECT content FROM messages
+        WHERE session_id = ? AND role = 'assistant'
+        ORDER BY timestamp DESC LIMIT 1
+    """, (session_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if row:
+        return {"response": row[0]}
+    return {"response": None}
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
@@ -116,33 +95,15 @@ async def logout(request: Request):
 
 @app.post("/api/submit")
 async def submit_chat(data: ChatRequest):
-    # 1. Validate or create conversation
-    conversation_id = data.session_id  # Using session_id as conversation_id for now
+    conversation_id = data.session_id  # session_id == conversation_id
 
-    # 2. Insert user's message into DB
-    insert_user_message(conversation_id, data.user_input)
+    # Save user's message
+    add_message(conversation_id, "user", data.user_input)
 
-    # 3. Queue the message for processing
-    job_id = queue_chat_job(conversation_id, data.model, data.system_prompt)
+    # Queue the job (no UUID, DB has AUTOINCREMENT id)
+    queue_prompt(conversation_id, data.user_input, data.model, data.system_prompt)
 
-    return JSONResponse({"job_id": job_id})
-
-@app.get("/api/status/{session_id}")
-async def check_status(session_id: str):
-    conn = sqlite3.connect("app/memory.db")
-    c = conn.cursor()
-    c.execute("""
-        SELECT content FROM messages
-        WHERE session_id = ? AND role = 'assistant'
-        ORDER BY timestamp DESC LIMIT 1
-    """, (session_id,))
-    row = c.fetchone()
-    conn.close()
-
-    if row:
-        return {"response": row[0]}
-    return {"response": None}
-
+    return JSONResponse({"queued": True})
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, password: str = Form(...)):
