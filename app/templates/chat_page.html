@@ -46,7 +46,7 @@
   const systemPrompt = document.getElementById('system-prompt');
   const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
   localStorage.setItem('session_id', sessionId);
-const loader = document.getElementById('loader');
+  const loader = document.getElementById('loader');
 
 chatForm.onsubmit = async (e) => {
   e.preventDefault();
@@ -68,12 +68,17 @@ chatForm.onsubmit = async (e) => {
       })
     });
 
+    if (!res.ok) {
+      throw new Error(`Server error ${res.status}`);
+    }
+
     const data = await res.json();
     appendMessage('assistant', data.response || '[Error: No reply]');
   } catch (err) {
-    appendMessage('assistant', '[Error: Request failed]');
+    console.error('Fetch failed:', err);
+    appendMessage('assistant', `[Error: ${err.message}]`);
   } finally {
-    loader.classList.add('hidden'); // 👈 Hide spinner
+    loader.classList.add('hidden'); // 👈 Always hide spinner
   }
 };
 </script>
