@@ -10,12 +10,11 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from app.auth_utils import verify_password, require_login, is_authenticated
 from app.memory import add_message, queue_prompt, get_db_connection
+from app.model_runner import run_model
 from pydantic import BaseModel
 from datetime import datetime
 from uuid import uuid4
 import uvicorn
-
-from app.model_runner import run_model
 
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
