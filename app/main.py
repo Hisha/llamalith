@@ -43,6 +43,41 @@ async def chat_ui(request: Request):
         "now": datetime.now  # 👈 injects `now` function
     })
 
+@app.get("/api/chat/status/{job_id}")
+async def check_job_status(job_id: int):
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    c.execute("SELECT status FROM chat_queue WHERE id = ?", (job_id,))
+    row = c.fetchone()
+
+    if not row:
+        conn.close()
+        return JSONResponse(content={"error": "Job not found"}, status_code=404)
+
+    status = row[0]
+
+    if status == "done":
+        # Get latest assistant message
+        c.execute("""
+            SELECT content FROM messages
+            WHERE conversation_id = (
+                SELECT conversation_id FROM chat_queue WHERE id = ?
+            )
+            AND role = 'assistant'
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """, (job_id,))
+        assistant_row = c.fetchone()
+        conn.close()
+        return {
+            "status": "done",
+            "response": assistant_row[0] if assistant_row else "[No response]"
+        }
+
+    conn.close()
+    return {"status": status}
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
     return templates.TemplateResponse("login.html", {
