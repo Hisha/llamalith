@@ -43,6 +43,9 @@ def init_db():
 
 init_db()
 
+def get_db_connection():
+    return sqlite3.connect(DB_PATH)
+
 # --- Conversation Operations ---
 def create_conversation(title):
     conn = sqlite3.connect(DB_PATH)
