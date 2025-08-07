@@ -53,7 +53,7 @@ async def login_get(request: Request):
 @app.get("/logout")
 async def logout(request: Request):
     request.session.clear()
-    return RedirectResponse(url="login.html", status_code=303)
+    return RedirectResponse(url="/chat", status_code=303)
 
 #####################################################################################
 #                                   POST                                            #
