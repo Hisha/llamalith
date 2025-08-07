@@ -53,7 +53,7 @@ async def login_get(request: Request):
 @app.get("/logout")
 async def logout(request: Request):
     request.session.clear()
-    return RedirectResponse(url="/login", status_code=303)
+    return RedirectResponse(url="login.html", status_code=303)
 
 #####################################################################################
 #                                   POST                                            #
@@ -63,7 +63,7 @@ async def logout(request: Request):
 async def login_post(request: Request, password: str = Form(...)):
     if verify_password(password):
         request.session["logged_in"] = True
-        return RedirectResponse(url="/", status_code=303)
+        return RedirectResponse(url="/chat", status_code=303)
 
     return templates.TemplateResponse("login.html", {
         "request": request,
