@@ -2,15 +2,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import sqlite3
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from app.auth_utils import verify_password, require_login, is_authenticated
-from app.memory import add_message_to_conversation, queue_prompt
+from app.memory import add_message_to_conversation, queue_prompt, get_db_connection
 from pydantic import BaseModel
 from datetime import datetime
+from uuid import uuid4
 import uvicorn
 
 from app.model_runner import run_model
@@ -59,18 +61,28 @@ async def logout(request: Request):
 
 @app.post("/api/chat")
 async def chat_api(data: ChatRequest):
-    # Save user message to DB
-    add_message_to_conversation(data.session_id, "user", data.user_input)
+    conversation_id = data.session_id
 
-    # Queue it for background processing
-    queue_id = queue_prompt(
-        session_id=data.session_id,
-        user_input=data.user_input,
-        model=data.model,
-        system_prompt=data.system_prompt
-    )
+    # Save the user's message
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO messages (conversation_id, role, content)
+        VALUES (?, 'user', ?)
+    """, (conversation_id, data.user_input))
 
-    return {"status": "queued", "queue_id": queue_id}
+    # Insert a job into the queue
+    c.execute("""
+        INSERT INTO chat_queue (conversation_id, user_input, model, system_prompt, status)
+        VALUES (?, ?, ?, ?, 'queued')
+    """, (conversation_id, data.user_input, data.model, data.system_prompt))
+    conn.commit()
+
+    # Get the ID of the job just inserted
+    job_id = c.lastrowid
+    conn.close()
+
+    return {"queued": True, "job_id": job_id}
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, password: str = Form(...)):
