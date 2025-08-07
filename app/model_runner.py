@@ -56,7 +56,7 @@ def run_model(model_key, messages):
 
     output = model(
         prompt,
-        max_tokens=MAX_TOKENS,
+        max_tokens=config.get("model_settings", {}).get(model_key, {}).get("max_tokens", MAX_TOKENS),
         stop=["[USER]", "[SYSTEM]", "[ASSISTANT]"],
         echo=False
     )
