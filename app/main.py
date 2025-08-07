@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from app.auth_utils import verify_password, require_login, is_authenticated
+from app.memory import add_message_to_conversation, queue_prompt
 from pydantic import BaseModel
 from datetime import datetime
 import uvicorn
@@ -58,15 +59,18 @@ async def logout(request: Request):
 
 @app.post("/api/chat")
 async def chat_api(data: ChatRequest):
-    history = get_session_memory(data.session_id)
-    if data.system_prompt:
-        history.insert(0, {"role": "system", "content": data.system_prompt})
-    history.append({"role": "user", "content": data.user_input})
+    # Save user message to DB
+    add_message_to_conversation(data.session_id, "user", data.user_input)
 
-    response = run_model(data.model, history)
-    update_session_memory(data.session_id, {"role": "user", "content": data.user_input})
-    update_session_memory(data.session_id, {"role": "assistant", "content": response})
-    return {"response": response}
+    # Queue it for background processing
+    queue_id = queue_prompt(
+        session_id=data.session_id,
+        user_input=data.user_input,
+        model=data.model,
+        system_prompt=data.system_prompt
+    )
+
+    return {"status": "queued", "queue_id": queue_id}
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, password: str = Form(...)):
