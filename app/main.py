@@ -127,6 +127,23 @@ async def submit_chat(data: ChatRequest):
 
     return JSONResponse({"job_id": job_id})
 
+@app.get("/api/status/{session_id}")
+async def check_status(session_id: str):
+    conn = sqlite3.connect("app/memory.db")
+    c = conn.cursor()
+    c.execute("""
+        SELECT content FROM messages
+        WHERE session_id = ? AND role = 'assistant'
+        ORDER BY timestamp DESC LIMIT 1
+    """, (session_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if row:
+        return {"response": row[0]}
+    return {"response": None}
+
+
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, password: str = Form(...)):
     if verify_password(password):
