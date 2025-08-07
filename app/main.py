@@ -21,6 +21,8 @@ from app.memory import get_session_memory, update_session_memory
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 
+DB_PATH = "app/memory.db"
+
 # Jinja2 templates for frontend
 templates = Jinja2Templates(directory="app/templates")
 
@@ -30,6 +32,24 @@ class ChatRequest(BaseModel):
     model: str = "mistral"  # "mistral" or "mythomax"
     session_id: str
     system_prompt: str = ""
+
+def insert_user_message(conversation_id: str, content: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO messages (conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+              (conversation_id, "user", content, datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+
+def queue_chat_job(conversation_id: str, model: str, system_prompt: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    job_id = str(uuid.uuid4())
+    c.execute("INSERT INTO chat_queue (job_id, conversation_id, model, system_prompt, status, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+              (job_id, conversation_id, model, system_prompt, "queued", datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+    return job_id
 
 #####################################################################################
 #                                   GET                                             #
@@ -94,30 +114,18 @@ async def logout(request: Request):
 #                                   POST                                            #
 #####################################################################################
 
-@app.post("/api/chat")
-async def chat_api(data: ChatRequest):
-    conversation_id = data.session_id
+@app.post("/api/submit")
+async def submit_chat(data: ChatRequest):
+    # 1. Validate or create conversation
+    conversation_id = data.session_id  # Using session_id as conversation_id for now
 
-    # Save the user's message
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO messages (conversation_id, role, content)
-        VALUES (?, 'user', ?)
-    """, (conversation_id, data.user_input))
+    # 2. Insert user's message into DB
+    insert_user_message(conversation_id, data.user_input)
 
-    # Insert a job into the queue
-    c.execute("""
-        INSERT INTO chat_queue (conversation_id, user_input, model, system_prompt, status)
-        VALUES (?, ?, ?, ?, 'queued')
-    """, (conversation_id, data.user_input, data.model, data.system_prompt))
-    conn.commit()
+    # 3. Queue the message for processing
+    job_id = queue_chat_job(conversation_id, data.model, data.system_prompt)
 
-    # Get the ID of the job just inserted
-    job_id = c.lastrowid
-    conn.close()
-
-    return {"queued": True, "job_id": job_id}
+    return JSONResponse({"job_id": job_id})
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, password: str = Form(...)):
