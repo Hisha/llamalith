@@ -1,7 +1,7 @@
 import multiprocessing
 import time
-from app.memory import get_next_job, mark_job_done, save_assistant_message
-from app.model_runner import run_model
+from memory import get_next_job, mark_job_done, save_assistant_message
+from model_runner import run_model
 
 def worker_loop(worker_id):
     print(f"🚀 Worker {worker_id} started.")
