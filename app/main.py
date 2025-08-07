@@ -59,6 +59,30 @@ async def logout(request: Request):
 #                                   POST                                            #
 #####################################################################################
 
+@app.post("/api/chat")
+async def chat_api(data: ChatRequest):
+    print(f"[DEBUG] Incoming chat: {data.model=} {data.session_id=} {data.user_input=}")
+
+    history = get_session_memory(data.session_id)
+
+    messages = []
+    if data.system_prompt:
+        messages.append({"role": "system", "content": data.system_prompt})
+    messages.extend(history)
+    messages.append({"role": "user", "content": data.user_input})
+
+    try:
+        output = run_model(data.model, messages)
+    except Exception as e:
+        print(f"[ERROR] Model failed: {e}")
+        return JSONResponse({"reply": "⚠️ Model error."}, status_code=500)
+
+    update_session_memory(data.session_id, {"role": "user", "content": data.user_input})
+    update_session_memory(data.session_id, {"role": "assistant", "content": output})
+
+    return JSONResponse({"reply": output})
+
+
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, password: str = Form(...)):
     if verify_password(password):
