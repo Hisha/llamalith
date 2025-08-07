@@ -48,13 +48,21 @@
   localStorage.setItem('session_id', sessionId);
   const loader = document.getElementById('loader');
 
+function appendMessage(role, content) {
+  const div = document.createElement('div');
+  div.className = role === 'user' ? 'user mb-2' : 'assistant mb-2';
+  div.textContent = `${role}: ${content}`;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
 chatForm.onsubmit = async (e) => {
   e.preventDefault();
   const input = userInput.value.trim();
   if (!input) return;
   appendMessage('user', input);
   userInput.value = '';
-  loader.classList.remove('hidden'); // 👈 Show spinner
+  loader.classList.remove('hidden');
 
   try {
     const res = await fetch('/chat/api/chat', {
@@ -78,8 +86,9 @@ chatForm.onsubmit = async (e) => {
     console.error('Fetch failed:', err);
     appendMessage('assistant', `[Error: ${err.message}]`);
   } finally {
-    loader.classList.add('hidden'); // 👈 Always hide spinner
+    loader.classList.add('hidden');
   }
 };
+
 </script>
 {% endblock %}
