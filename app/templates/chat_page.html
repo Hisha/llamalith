@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block head %}
-  <script src="/static/chat.js"></script>
+  <script src="{{ request.scope.root_path }}/static/chat.js"></script>
 {% endblock %}
 
 {% block content %}
