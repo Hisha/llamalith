@@ -126,3 +126,58 @@ def mark_processed(queue_id, result):
     """, (result, datetime.utcnow().isoformat(), queue_id))
     conn.commit()
     conn.close()
+
+# --- Atomic claim next job for multi-process workers ---
+def claim_next_job():
+    conn = sqlite3.connect(DB_PATH)
+    conn.isolation_level = None  # we control transactions manually
+    c = conn.cursor()
+    try:
+        c.execute("BEGIN IMMEDIATE")  # lock for write, prevents two workers grabbing same job
+        c.execute("""
+            SELECT id, conversation_id, user_input, model, system_prompt
+            FROM chat_queue
+            WHERE status = 'queued'
+            ORDER BY created_at ASC
+            LIMIT 1
+        """)
+        row = c.fetchone()
+        if not row:
+            c.execute("COMMIT")
+            conn.close()
+            return None
+
+        job_id, convo_id, user_input, model, system_prompt = row
+        c.execute("""
+            UPDATE chat_queue
+            SET status = 'processing'
+            WHERE id = ?
+        """, (job_id,))
+        c.execute("COMMIT")
+        conn.close()
+        return {
+            "id": job_id,
+            "conversation_id": convo_id,
+            "user_input": user_input,
+            "model": model,
+            "system_prompt": system_prompt
+        }
+    except Exception:
+        c.execute("ROLLBACK")
+        conn.close()
+        raise
+
+def save_assistant_message(conversation_id, content):
+    add_message(conversation_id, "assistant", content)
+
+def mark_job_done(job_id, failed=False, result_text=None):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    status = 'done' if not failed else 'error'
+    c.execute("""
+        UPDATE chat_queue
+        SET status = ?, result = ?, processed_at = ?
+        WHERE id = ?
+    """, (status, result_text, datetime.utcnow().isoformat(), job_id))
+    conn.commit()
+    conn.close()
