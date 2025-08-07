@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-from auth_utils import verify_password, require_login, is_authenticated
+from app.auth_utils import verify_password, require_login, is_authenticated
 from pydantic import BaseModel
 from datetime import datetime
 import uvicorn
