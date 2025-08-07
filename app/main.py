@@ -16,7 +16,6 @@ from uuid import uuid4
 import uvicorn
 
 from app.model_runner import run_model
-from app.memory import get_session_memory, update_session_memory
 
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
