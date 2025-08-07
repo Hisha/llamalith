@@ -75,7 +75,12 @@
     });
 
     const data = await res.json();
-    appendMessage('assistant', data.response || '[Error: No reply]');
+      appendMessage('assistant', data.response || '[Error: No reply]');
+    } catch (err) {
+      appendMessage('assistant', '[Error: Request failed]');
+    } finally {
+      loader.classList.add('hidden'); // 👈 Hide spinner
+    }
   };
 </script>
 {% endblock %}
