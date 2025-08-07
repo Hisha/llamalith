@@ -56,7 +56,7 @@ async def logout(request: Request):
 #                                   POST                                            #
 #####################################################################################
 
-@app.post("/chat/api/chat")
+@app.post("/api/chat")
 async def chat_api(data: ChatRequest):
     response = await run_model(
         user_input=data.user_input,
