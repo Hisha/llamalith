@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 
 {% block head %}
-  <script src="/chat/static/chat.js"></script>
+  <style>
+    #chat-box { height: 16rem; overflow-y: auto; }
+    .user { color: #68D391; } /* green-400 */
+    .assistant { color: #F6E05E; } /* yellow-300 */
+  </style>
 {% endblock %}
 
 {% block content %}
@@ -21,11 +25,51 @@
     <textarea id="system-prompt" class="w-full p-2 bg-gray-700 rounded text-gray-100" rows="3"></textarea>
   </div>
 
-  <div id="chat-box" class="bg-gray-900 p-4 h-64 overflow-y-auto rounded text-sm mb-4 border border-gray-700"></div>
+  <div id="chat-box" class="bg-gray-900 p-4 rounded text-sm mb-4 border border-gray-700"></div>
 
   <form id="chat-form" class="flex gap-2">
     <input type="text" id="user-input" class="flex-grow p-2 bg-gray-700 rounded text-gray-100" placeholder="Type your message..." autocomplete="off" />
     <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded font-bold">Send</button>
   </form>
 </div>
+
+<script>
+  const chatBox = document.getElementById('chat-box');
+  const chatForm = document.getElementById('chat-form');
+  const userInput = document.getElementById('user-input');
+  const modelSelect = document.getElementById('model-select');
+  const systemPrompt = document.getElementById('system-prompt');
+  const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
+  localStorage.setItem('session_id', sessionId);
+
+  function appendMessage(role, content) {
+    const div = document.createElement('div');
+    div.className = role === 'user' ? 'user mb-2' : 'assistant mb-2';
+    div.textContent = `${role}: ${content}`;
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  chatForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const input = userInput.value.trim();
+    if (!input) return;
+    appendMessage('user', input);
+    userInput.value = '';
+
+    const res = await fetch('/chat/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_input: input,
+        model: modelSelect.value,
+        system_prompt: systemPrompt.value,
+        session_id: sessionId
+      })
+    });
+
+    const data = await res.json();
+    appendMessage('assistant', data.response || '[Error: No reply]');
+  };
+</script>
 {% endblock %}
