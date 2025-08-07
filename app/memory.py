@@ -1,4 +1,3 @@
-# memory.py
 import sqlite3
 from datetime import datetime
 
@@ -95,45 +94,12 @@ def queue_prompt(conversation_id, user_input, model, system_prompt):
     conn.close()
     return queue_id
 
-def fetch_next_queued():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        SELECT id, conversation_id, user_input, model, system_prompt
-        FROM chat_queue
-        WHERE status = 'queued'
-        ORDER BY created_at ASC LIMIT 1
-    """)
-    row = c.fetchone()
-    conn.close()
-    if row:
-        return {
-            "id": row[0],
-            "conversation_id": row[1],
-            "user_input": row[2],
-            "model": row[3],
-            "system_prompt": row[4]
-        }
-    return None
-
-def mark_processed(queue_id, result):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        UPDATE chat_queue
-        SET status = 'done', result = ?, processed_at = ?
-        WHERE id = ?
-    """, (result, datetime.utcnow().isoformat(), queue_id))
-    conn.commit()
-    conn.close()
-
-# --- Atomic claim next job for multi-process workers ---
 def claim_next_job():
     conn = sqlite3.connect(DB_PATH)
-    conn.isolation_level = None  # we control transactions manually
+    conn.isolation_level = None
     c = conn.cursor()
     try:
-        c.execute("BEGIN IMMEDIATE")  # lock for write, prevents two workers grabbing same job
+        c.execute("BEGIN IMMEDIATE")
         c.execute("""
             SELECT id, conversation_id, user_input, model, system_prompt
             FROM chat_queue
