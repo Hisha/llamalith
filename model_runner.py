@@ -1,11 +1,20 @@
 from llama_cpp import Llama
 import os
+import json
 
-# Path to GGUF models (can be overridden by env or config)
-MODEL_PATHS = {
-    "mistral": os.getenv("MISTRAL_PATH", "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"),
-    "mythomax": os.getenv("MYTHOMAX_PATH", "models/mythomax-l2-13b.Q4_K_M.gguf")
-}
+# Load model paths from config file or environment
+CONFIG_PATH = os.getenv("LLAMALITH_CONFIG", "config.json")
+if os.path.exists(CONFIG_PATH):
+    with open(CONFIG_PATH, "r") as f:
+        config = json.load(f)
+        MODEL_PATHS = config.get("model_paths", {})
+        MAX_TOKENS = config.get("max_tokens", 512)
+else:
+    MODEL_PATHS = {
+        "mistral": os.getenv("MISTRAL_PATH", "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"),
+        "mythomax": os.getenv("MYTHOMAX_PATH", "models/mythomax-l2-13b.Q4_K_M.gguf")
+    }
+    MAX_TOKENS = int(os.getenv("MAX_TOKENS", 512))
 
 # Cache loaded models
 LOADED_MODELS = {}
@@ -47,7 +56,7 @@ def run_model(model_key, messages):
 
     output = model(
         prompt,
-        max_tokens=512,
+        max_tokens=MAX_TOKENS,
         stop=["[USER]", "[SYSTEM]", "[ASSISTANT]"],
         echo=False
     )
