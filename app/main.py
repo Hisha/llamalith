@@ -45,7 +45,10 @@ async def chat_ui(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse("login.html", {
+        "request": request,
+        "now": datetime.now
+    })
 
 @app.get("/logout")
 async def logout(request: Request):
@@ -61,9 +64,11 @@ async def login_post(request: Request, password: str = Form(...)):
     if verify_password(password):
         request.session["logged_in"] = True
         return RedirectResponse(url="/", status_code=303)
+
     return templates.TemplateResponse("login.html", {
         "request": request,
-        "error": "Invalid password"
+        "error": "Invalid password",
+        "now": datetime.now
     })
 
 if __name__ == "__main__":
