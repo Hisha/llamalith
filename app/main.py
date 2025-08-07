@@ -5,29 +5,25 @@ import os
 import sqlite3
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-from app.auth_utils import verify_password, require_login, is_authenticated
-from app.memory import add_message, queue_prompt, get_db_connection
-from app.model_runner import run_model
 from pydantic import BaseModel
 from datetime import datetime
-from uuid import uuid4
 import uvicorn
+
+from app.auth_utils import verify_password, require_login
+from app.memory import add_message, queue_prompt, get_db_connection
 
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 
-DB_PATH = "app/memory.db"
-
-# Jinja2 templates for frontend
+# Templates
 templates = Jinja2Templates(directory="app/templates")
 
 # Request body format for API
 class ChatRequest(BaseModel):
     user_input: str
-    model: str = "mistral"  # "mistral" or "mythomax"
+    model: str = "mistral"
     session_id: str
     system_prompt: str = ""
 
@@ -40,7 +36,7 @@ async def chat_ui(request: Request):
     require_login(request)
     return templates.TemplateResponse("chat_page.html", {
         "request": request,
-        "now": datetime.now  # 👈 injects `now` function
+        "now": datetime.now
     })
 
 @app.get("/api/status/{conversation_id}")
@@ -56,24 +52,7 @@ async def check_status(conversation_id: str):
     """, (conversation_id,))
     row = c.fetchone()
     conn.close()
-
     return {"response": row[0] if row else None}
-
-@app.get("/api/status/{session_id}")
-async def check_status(session_id: str):
-    conn = sqlite3.connect("app/memory.db")
-    c = conn.cursor()
-    c.execute("""
-        SELECT content FROM messages
-        WHERE session_id = ? AND role = 'assistant'
-        ORDER BY timestamp DESC LIMIT 1
-    """, (session_id,))
-    row = c.fetchone()
-    conn.close()
-
-    if row:
-        return {"response": row[0]}
-    return {"response": None}
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
@@ -98,10 +77,10 @@ async def submit_chat(data: ChatRequest):
     # Save user's message
     add_message(conversation_id, "user", data.user_input)
 
-    # Queue the job (no UUID, DB has AUTOINCREMENT id)
-    queue_prompt(conversation_id, data.user_input, data.model, data.system_prompt)
+    # Queue the job
+    job_id = queue_prompt(conversation_id, data.user_input, data.model, data.system_prompt)
 
-    return JSONResponse({"queued": True})
+    return JSONResponse({"job_id": job_id})
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, password: str = Form(...)):
