@@ -1,75 +1,35 @@
+import multiprocessing
 import time
-import sqlite3
+from app.db import get_next_job, mark_job_done, save_assistant_message
 from app.model_runner import run_model
-from app.memory import get_db_connection
 
-def process_next_job():
-    conn = get_db_connection()
-    c = conn.cursor()
-
-    # Get the oldest queued job
-    c.execute("""
-        SELECT id, conversation_id, user_input, model, system_prompt
-        FROM chat_queue
-        WHERE status = 'queued'
-        ORDER BY created_at ASC
-        LIMIT 1
-    """)
-    job = c.fetchone()
-
-    if not job:
-        conn.close()
-        return False
-
-    job_id, convo_id, user_input, model, system_prompt = job
-
-    # Update status to "processing"
-    c.execute("UPDATE chat_queue SET status = 'processing' WHERE id = ?", (job_id,))
-    conn.commit()
-
-    try:
-        # Fetch message history
-        c.execute("""
-            SELECT role, content FROM messages
-            WHERE conversation_id = ?
-            ORDER BY timestamp ASC
-        """, (convo_id,))
-        messages = c.fetchall()
-
-        # Format messages
-        history = [{"role": role, "content": content} for role, content in messages]
-        history.append({"role": "user", "content": user_input})
-
-        # Run model
-        response = run_model(model, history)
-
-        # Save assistant response
-        c.execute("""
-            INSERT INTO messages (conversation_id, role, content)
-            VALUES (?, 'assistant', ?)
-        """, (convo_id, response))
-
-        # Mark job complete
-        c.execute("UPDATE chat_queue SET status = 'done' WHERE id = ?", (job_id,))
-        conn.commit()
-
-        print(f"[✓] Job {job_id} completed.")
-    except Exception as e:
-        c.execute("UPDATE chat_queue SET status = 'failed' WHERE id = ?", (job_id,))
-        conn.commit()
-        print(f"[X] Job {job_id} failed: {e}")
-    finally:
-        conn.close()
-
-    return True
-
-
-def main_loop(poll_interval=2):
-    print("🌀 Chat queue worker started...")
+def worker_loop(worker_id):
     while True:
-        job_found = process_next_job()
-        if not job_found:
-            time.sleep(poll_interval)
+        job = get_next_job()
+        if job:
+            print(f"[Worker {worker_id}] Processing job {job['id']}...")
+            try:
+                assistant_output = run_model(
+                    job['model'],
+                    job['messages']
+                )
+                save_assistant_message(job['conversation_id'], assistant_output)
+                mark_job_done(job['id'])
+                print(f"[Worker {worker_id}] Done with job {job['id']}")
+            except Exception as e:
+                print(f"[Worker {worker_id}] Failed job {job['id']}: {e}")
+                mark_job_done(job['id'], failed=True)
+        else:
+            time.sleep(1)
 
 if __name__ == "__main__":
-    main_loop()
+    num_workers = 3  # ← Increase this based on available cores
+    processes = []
+
+    for i in range(num_workers):
+        p = multiprocessing.Process(target=worker_loop, args=(i+1,))
+        p.start()
+        processes.append(p)
+
+    for p in processes:
+        p.join()
