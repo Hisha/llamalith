@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+jinja2
+llama-cpp-python
+python-dotenv
