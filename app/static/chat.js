@@ -21,7 +21,7 @@ chatForm.onsubmit = async (e) => {
   appendMessage('user', input);
   userInput.value = '';
 
-  const res = await fetch('/api/chat', {
+  const res = await fetch('/chat/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
