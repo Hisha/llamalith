@@ -24,6 +24,22 @@ templates.env.globals["root_path"] = "/chat/"
 AVAILABLE_MODELS = [m.strip() for m in os.getenv("LLM_MODELS", "mistral,mythomax").split(",") if m.strip()]
 templates.env.globals["AVAILABLE_MODELS"] = AVAILABLE_MODELS
 
+SYSTEM_PRESETS = [
+    {
+        "name": "Photo Image Prompt",
+        "text": "You are an expert Flux Image Prompt Engineer. Image prompts that stay within the 256 token limit of the Flux box. Photo, hyper-realism, ultra high quality, 8K."
+    },
+    {
+        "name": "Fantasy Story Author",
+        "text": "You are a fantasy author who writes vivid, character-driven short stories with strong worldbuilding and clear arcs."
+    },
+    {
+        "name": "Non-Fiction Author",
+        "text": "You write concise, structured non-fiction with clear headings, examples, and sources when appropriate."
+    },
+]
+templates.env.globals["SYSTEM_PRESETS"] = SYSTEM_PRESETS
+
 # Request body format for API
 class ChatRequest(BaseModel):
     user_input: str
