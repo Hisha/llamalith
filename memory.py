@@ -69,7 +69,7 @@ def list_conversations():
 def add_message(conversation_id, role, content):
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
-    c.execute("INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)",
+    c.execute("INSERT INTO messages (conversation_id, role, model, content) VALUES (?, ?, ?, ?)",
               (conversation_id, role, content))
     conn.commit()
     conn.close()
@@ -135,8 +135,8 @@ def claim_next_job():
         conn.close()
         raise
 
-def save_assistant_message(conversation_id, content):
-    add_message(conversation_id, "assistant", content)
+def save_assistant_message(conversation_id, content, model=None):
+    add_message(conversation_id, "assistant", content, model=model)
 
 def mark_job_done(job_id, failed=False, result_text=None):
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
