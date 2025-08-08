@@ -3,7 +3,7 @@ load_dotenv()
 
 import os
 import sqlite3
-from fastapi import FastAPI, Form, Request, Query, HTTPException
+from fastapi import FastAPI, Form, Request, Query, HTTPException, Body
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional
 import uvicorn
 from auth_utils import verify_password, require_login
-from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_jobs, get_job, list_conversations, ensure_conversation
+from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_jobs, get_job, list_conversations, ensure_conversation, create_conversation
 
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
@@ -146,12 +146,41 @@ async def reply_conversation(conversation_id: str, body: ReplyRequest):
     return {"job_id": job_id}
 
 @app.post("/api/jobs")
-async def create_job(body: CreateJobRequest):
-    # store user message (with model for traceability)
-    add_message(body.conversation_id, "user", body.content, model=body.model)
-    # enqueue
-    job_id = queue_prompt(body.conversation_id, body.content, body.model, body.system_prompt)
-    return {"job_id": job_id, "conversation_id": body.conversation_id}
+async def create_job(
+    payload: dict = Body(...)
+):
+    # expected: { "content": str, "model": str, "conversation_id": optional, "system_prompt": optional }
+    content = (payload.get("content") or "").strip()
+    model = (payload.get("model") or "mistral").strip()
+    system_prompt = (payload.get("system_prompt") or "").strip()
+    conv_id_raw = payload.get("conversation_id")
+
+    if not content:
+        return JSONResponse({"error": "content is required"}, status_code=400)
+
+    created_new = False
+    # If no conversation_id provided, create one
+    if not conv_id_raw:
+        # simple title from first 60 chars of the content
+        title = content[:60]
+        conversation_id = create_conversation(title=title or "New Conversation")
+        created_new = True
+    else:
+        conversation_id = int(conv_id_raw)
+
+    # Save user's message
+    add_message(conversation_id, "user", content)
+
+    # Queue processing
+    job_id = queue_prompt(conversation_id, content, model, system_prompt)
+
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "conversation_id": conversation_id,
+        "created_new": created_new,
+        "model": model,
+    }
 
 @app.post("/api/submit")
 async def submit_chat(data: ChatRequest):
