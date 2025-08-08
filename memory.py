@@ -2,7 +2,7 @@
 import os
 import sqlite3
 from datetime import datetime
-from Typing import Optional
+from typing import Optional
 from uuid import uuid4
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "memory.db")
