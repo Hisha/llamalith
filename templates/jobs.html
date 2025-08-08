@@ -8,8 +8,9 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
       <input id="conversation_id" class="bg-gray-700 p-2 rounded" placeholder="Conversation ID (e.g. session_id)" />
       <select id="model" class="bg-gray-700 p-2 rounded">
-        <option value="mistral">mistral</option>
-        <option value="mythomax">mythomax</option>
+        {% for m in AVAILABLE_MODELS %}
+          <option value="{{ m }}">{{ m }}</option>
+        {% endfor %}
       </select>
       <input id="system_prompt" class="bg-gray-700 p-2 rounded" placeholder="System prompt (optional)" />
       <button class="bg-indigo-600 hover:bg-indigo-500 rounded px-3 py-2">Create Job</button>
@@ -39,6 +40,7 @@
 const BASE = "{{ request.scope.root_path or '' }}";
 const jobsBody = document.getElementById('jobs-body');
 const jobDetail = document.getElementById('job-detail');
+const ALL_MODELS = {{ AVAILABLE_MODELS | tojson }};
 
 async function loadJobs() {
   const res = await fetch(`${BASE}/api/jobs`);
@@ -88,8 +90,6 @@ async function viewJob(jobId){
   `;
 }
 
-const ALL_MODELS = ["mistral", "mythomax"];
-
 function modelOptionsHTML(jobModel) {
   const models = Array.from(new Set([jobModel, ...ALL_MODELS]));
   return models
@@ -109,7 +109,8 @@ async function replyJob(e, conversationId, jobId){
     body: JSON.stringify({ model, content })
   });
 
-  alert('Queued reply.');
+  document.getElementById(`reply-text-${jobId}`).value = '';
+  await viewJob(jobId); // refresh conversation view so you see your reply
   return false;
 }
 
