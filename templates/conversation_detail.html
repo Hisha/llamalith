@@ -23,23 +23,25 @@
   </div>
 
   <!-- Jobs -->
-  <div class="bg-gray-800 rounded p-4">
-    <h3 class="font-semibold mb-2">Jobs</h3>
-    <div class="space-y-2">
-      {% for j in jobs %}
-        <div class="text-sm border border-gray-700 rounded p-2">
-          <div><span class="text-gray-400">Job #</span>{{ j[0] }}</div>
-          <div><span class="text-gray-400">Model:</span> {{ j[2] }}</div>
-          <div><span class="text-gray-400">Status:</span> {{ j[3] }}</div>
-          <div><span class="text-gray-400">Created:</span> {{ j[4] }}</div>
-          {% if j[5] %}<div><span class="text-gray-400">Processed:</span> {{ j[5] }}</div>{% endif %}
-        </div>
-      {% endfor %}
-      {% if not jobs %}
-        <p class="text-gray-400">No jobs yet.</p>
-      {% endif %}
-    </div>
-  </div>
+  <div class="bg-gray-800 p-3 rounded space-y-2">
+    <div class="text-sm font-semibold mb-1">Jobs</div>
+      {% if jobs %}
+        {% for j in jobs[:8] %}
+          <div class="border border-gray-700 rounded p-2 text-xs">
+            <div class="font-semibold">Job #{{ j.id }}</div>
+            <div>Model: {{ j.model }}</div>
+            <div>Status: {{ j.status }}</div>
+            <div>Created: {{ j.created_at }}</div>
+            <div class="mt-1">
+              <a class="underline" href="{{ request.scope.root_path }}/jobs" onclick="event.preventDefault(); viewJob({{ j.id }});">
+                View
+              </a>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+    <div class="text-xs text-gray-400">No jobs yet.</div>
+  {% endif %}
 </div>
 
 <!-- Reply form -->
