@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional
 import uvicorn
 from auth_utils import verify_password, require_login
-from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_conversations, ensure_conversation, create_conversation, list_jobs, get_job
+from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_conversations, ensure_conversation, create_conversation, list_jobs, get_job, last_model_for_conversation
 
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
@@ -108,11 +108,13 @@ async def conversation_detail(request: Request, conversation_id: str):
     ensure_conversation(conversation_id)
     messages = get_conversation_messages(conversation_id)
     jobs = list_jobs(conversation_id=conversation_id, limit=50)
+    last_used_model = last_model_for_conversation(conversation_id)
     return templates.TemplateResponse("conversation_detail.html", {
         "request": request,
         "conversation_id": conversation_id,
         "messages": messages,
         "jobs": jobs,
+        "last_used_model": last_used_model,
         "now": datetime.now
     })
 
