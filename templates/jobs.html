@@ -49,18 +49,9 @@ const jobDetail = document.getElementById('job-detail');
 const ALL_MODELS = {{ AVAILABLE_MODELS | tojson }};
 
 async function loadJobs() {
-  const res = await fetch(`${BASE}/api/jobs`);
-  const data = await res.json();
-  jobsBody.innerHTML = data.jobs.map(j => `
-    <tr>
-      <td>${j.id}</td>
-      <td>${j.conversation_id}</td>
-      <td>${j.model}</td>
-      <td>${j.status}</td>
-      <td>${j.created_at || ''}</td>
-      <td><button class="underline text-sm" onclick="viewJob(${j.id})">View</button></td>
-    </tr>
-  `).join('');
+  const res = await fetch(`${BASE}/jobs/rows`);
+  const html = await res.text();
+  document.getElementById('jobs-body').innerHTML = html;
 }
 
 async function viewJob(jobId){
