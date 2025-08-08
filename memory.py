@@ -70,7 +70,7 @@ def add_message(conversation_id, role, content, model=None):
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("INSERT INTO messages (conversation_id, role, model, content) VALUES (?, ?, ?, ?)",
-              (conversation_id, role, content))
+              (conversation_id, role, content, model))
     conn.commit()
     conn.close()
 
