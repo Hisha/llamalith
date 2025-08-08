@@ -153,7 +153,8 @@ async def create_job(
     content = (payload.get("content") or "").strip()
     model = (payload.get("model") or "mistral").strip()
     system_prompt = (payload.get("system_prompt") or "").strip()
-    conv_id_raw = payload.get("conversation_id")
+    conv_id_raw = data.get("conversation_id")
+    conversation_id = conv_id_raw if conv_id_raw else str(uuid.uuid4())
 
     if not content:
         return JSONResponse({"error": "content is required"}, status_code=400)
