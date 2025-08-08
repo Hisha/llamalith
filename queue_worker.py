@@ -1,6 +1,7 @@
 # app/queue_worker.py
 import multiprocessing
 import time
+import sys
 from memory import (
     claim_next_job,
     get_conversation_messages,
@@ -41,7 +42,7 @@ def worker_loop(worker_id: int):
             print(f"[Worker {worker_id}] ✅ Finished job {jid}")
         except Exception as e:
             mark_job_done(jid, failed=True, result_text=str(e))
-            print(f"[Worker {worker_id}] ❌ Failed job {jid}: {e}")
+            print(f"[Worker {worker_id}] ❌ Failed job {jid}: {e}", file=sys.stderr)
 
 def main():
     procs = []
