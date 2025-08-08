@@ -170,35 +170,45 @@ def mark_job_done(job_id: int, failed=False, result_text=None):
 
 # --- Jobs (chat_queue) helpers ---
 
-def list_jobs(status=None, limit=50):
+def list_jobs(conversation_id: str = None, status: str = None, limit: int = 100):
     conn = get_db_connection()
     c = conn.cursor()
+
+    where = []
+    params = []
+
+    if conversation_id:
+        where.append("conversation_id = ?")
+        params.append(conversation_id)
     if status:
-        c.execute("""
-            SELECT id, conversation_id, model, status, created_at, processed_at
-            FROM chat_queue
-            WHERE status = ?
-            ORDER BY id DESC
-            LIMIT ?
-        """, (status, limit))
-    else:
-        c.execute("""
-            SELECT id, conversation_id, model, status, created_at, processed_at
-            FROM chat_queue
-            ORDER BY id DESC
-            LIMIT ?
-        """, (limit,))
+        where.append("status = ?")
+        params.append(status)
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    c.execute(f"""
+        SELECT id, conversation_id, user_input, model, system_prompt, status, result, created_at, processed_at
+        FROM chat_queue
+        {where_sql}
+        ORDER BY created_at DESC
+        LIMIT ?
+    """, (*params, limit))
+
     rows = c.fetchall()
     conn.close()
+
     return [
         {
             "id": r[0],
             "conversation_id": r[1],
-            "model": r[2],
-            "status": r[3],
-            "created_at": r[4],
-            "processed_at": r[5],
-        } for r in rows
+            "user_input": r[2],
+            "model": r[3],
+            "system_prompt": r[4],
+            "status": r[5],
+            "result": r[6],
+            "created_at": r[7],
+            "processed_at": r[8],
+        }
+        for r in rows
     ]
 
 def get_job(job_id: int):
