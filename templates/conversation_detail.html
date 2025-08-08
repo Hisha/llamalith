@@ -50,7 +50,13 @@
       <label class="block text-sm mb-1">Model</label>
       <select name="model" class="w-full p-2 bg-gray-700 rounded text-gray-100">
         {% for m in AVAILABLE_MODELS %}
-          <option value="{{ m }}">{{ m }}</option>
+          <option value="{{ m }}"
+            {% if last_used_model %}
+              {% if m == last_used_model %}selected{% endif %}
+            {% else %}
+              {% if loop.first %}selected{% endif %}
+            {% endif %}
+          >{{ m }}</option>
         {% endfor %}
       </select>
     </div>
