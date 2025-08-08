@@ -87,11 +87,10 @@ async def submit_chat(data: ChatRequest):
     conn.close()
 
     if not last_msg or last_msg[0] != "user" or last_msg[1] != data.user_input:
-        add_message(conversation_id, "user", data.user_input)
+        # 👇 persist which model this prompt targets
+        add_message(conversation_id, "user", data.user_input, model=data.model)
 
-    # Queue the job
     job_id = queue_prompt(conversation_id, data.user_input, data.model, data.system_prompt)
-
     return JSONResponse({"job_id": job_id})
 
 @app.post("/login", response_class=HTMLResponse)
