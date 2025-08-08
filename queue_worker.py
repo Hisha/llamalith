@@ -36,7 +36,7 @@ def worker_loop(worker_id: int):
                 history.insert(0, {"role": "system", "content": system_prompt.strip()})
 
             reply = run_model(model_key, history)
-            save_assistant_message(convo_id, reply, model=model_key)
+            save_assistant_message(convo_id, reply)
             mark_job_done(jid, failed=False, result_text=reply)
 
             print(f"[Worker {worker_id}] ✅ Finished job {jid}")
