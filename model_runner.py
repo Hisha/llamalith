@@ -1,4 +1,5 @@
 from llama_cpp import Llama
+from typing import List, Dict, Optional
 import os
 import json
 
@@ -54,7 +55,7 @@ def format_messages(messages):
     return prompt
 
 # Run a model with message history
-def run_model(model_key: str, messages: list[dict]) -> str:
+def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     llm = get_llama_instance(model_key)  # your loader with n_threads set (see below)
     n_ctx = getattr(llm, "n_ctx", lambda: 4096)()
     # build your chat prompt string or tokens
