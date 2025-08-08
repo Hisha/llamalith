@@ -116,30 +116,54 @@ document.getElementById('refresh').onclick = loadJobs;
 
 document.getElementById('create-job').onsubmit = async (e) => {
   e.preventDefault();
+  try {
+    const convEl = document.getElementById('conversation_id');
+    const modelEl = document.getElementById('model');
+    const sysEl   = document.getElementById('system_prompt');
+    const contentEl = document.getElementById('content');
 
-  const convVal = document.getElementById('conversation_id').value.trim();
-  const model = document.getElementById('model').value;
-  const system_prompt = document.getElementById('system_prompt').value;
-  const content = document.getElementById('content').value.trim();
+    const convVal = (convEl.value || "").trim();
+    const model = modelEl.value;
+    const system_prompt = (sysEl.value || "").trim();
+    const content = (contentEl.value || "").trim();
 
-  if (!content) return;
+    // Require at least one of these to avoid silent no-op.
+    if (!content && !system_prompt) {
+      alert("Enter a prompt or a system prompt.");
+      return;
+    }
 
-  const payload = { model, content, system_prompt };
-  if (convVal) {
-    payload.conversation_id = convVal;
+    const payload = { model, system_prompt, content };
+    if (convVal) payload.conversation_id = convVal;
+
+    console.log("POST /api/jobs payload:", payload);
+    const res = await fetch(`${BASE}/api/jobs`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(()=>"");
+      console.error("Create job failed:", res.status, txt);
+      alert(`Server error ${res.status}: ${txt || 'see logs'}`);
+      return;
+    }
+
+    const data = await res.json().catch(()=> ({}));
+    console.log("Create job ok:", data);
+
+    // Clear inputs only after successful POST
+    convEl.value = "";
+    sysEl.value = "";
+    contentEl.value = "";
+
+    // Refresh list
+    await loadJobs();
+  } catch (err) {
+    console.error("Create job exception:", err);
+    alert(`Create job failed: ${err?.message || err}`);
   }
-
-  await fetch(`${BASE}/api/jobs`, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(payload)
-  });
-
-  // Clear fields after creating the job
-  document.getElementById('conversation_id').value = '';
-  document.getElementById('content').value = '';
-
-  await loadJobs();
 };
 
 loadJobs();
