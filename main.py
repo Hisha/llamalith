@@ -63,9 +63,7 @@ async def get_conversation(conversation_id: str):
 async def list_jobs_api(status: Optional[str] = None,
                         conversation_id: Optional[str] = None,
                         limit: int = 100):
-    # conversation_id comes in as str from URL; keep None or cast if not None
-    conv_id = int(conversation_id) if conversation_id is not None and conversation_id.isdigit() else conversation_id
-    jobs = list_jobs(conversation_id=conv_id, status=status, limit=limit)
+    jobs = list_jobs(conversation_id=conversation_id, status=status, limit=limit)
     return {"jobs": jobs}
 
 # Get job details (status + result)
