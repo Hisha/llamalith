@@ -3,7 +3,7 @@ load_dotenv()
 
 import os
 import sqlite3
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -12,7 +12,7 @@ from datetime import datetime
 import uvicorn
 
 from auth_utils import verify_password, require_login
-from memory import add_message, queue_prompt, get_db_connection
+from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_jobs, get_job
 
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
@@ -28,6 +28,19 @@ class ChatRequest(BaseModel):
     session_id: str
     system_prompt: str = ""
 
+# Create a new job (starts a conversation or continues one)
+class CreateJobRequest(BaseModel):
+    model: str
+    content: str
+    conversation_id: str  # you’re already using session_id as conversation_id
+    system_prompt: str = ""
+
+# Reply in a conversation -> creates another job
+class ReplyRequest(BaseModel):
+    model: str
+    content: str
+    system_prompt: str = ""
+
 #####################################################################################
 #                                   GET                                             #
 #####################################################################################
@@ -39,6 +52,11 @@ async def chat_ui(request: Request):
         "request": request,
         "now": datetime.now
     })
+
+# Get the full conversation thread for a given conversation_id
+@app.get("/api/conversations/{conversation_id}/messages")
+async def get_conversation(conversation_id: str):
+    return {"messages": get_conversation_messages(conversation_id)}
 
 @app.get("/api/status/{conversation_id}")
 async def check_status(conversation_id: str):
@@ -55,6 +73,19 @@ async def check_status(conversation_id: str):
     conn.close()
     return {"response": row[0] if row else None}
 
+# List recent jobs (optionally by status)
+@app.get("/api/jobs")
+async def list_jobs_api(status: str = Query(None)):
+    return {"jobs": list_jobs(status=status)}
+
+# Get job details (status + result)
+@app.get("/api/jobs/{job_id}")
+async def get_job_api(job_id: int):
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
     return templates.TemplateResponse("login.html", {
@@ -70,6 +101,20 @@ async def logout(request: Request):
 #####################################################################################
 #                                   POST                                            #
 #####################################################################################
+
+@app.post("/api/conversations/{conversation_id}/reply")
+async def reply_conversation(conversation_id: str, body: ReplyRequest):
+    add_message(conversation_id, "user", body.content, model=body.model)
+    job_id = queue_prompt(conversation_id, body.content, body.model, body.system_prompt)
+    return {"job_id": job_id}
+
+@app.post("/api/jobs")
+async def create_job(body: CreateJobRequest):
+    # store user message (with model for traceability)
+    add_message(body.conversation_id, "user", body.content, model=body.model)
+    # enqueue
+    job_id = queue_prompt(body.conversation_id, body.content, body.model, body.system_prompt)
+    return {"job_id": job_id, "conversation_id": body.conversation_id}
 
 @app.post("/api/submit")
 async def submit_chat(data: ChatRequest):
