@@ -49,8 +49,9 @@
     <div>
       <label class="block text-sm mb-1">Model</label>
       <select name="model" class="w-full p-2 bg-gray-700 rounded text-gray-100">
-        <option value="mistral">Mistral</option>
-        <option value="mythomax">MythoMax</option>
+        {% for m in AVAILABLE_MODELS %}
+          <option value="{{ m }}">{{ m }}</option>
+        {% endfor %}
       </select>
     </div>
     <div>
