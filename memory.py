@@ -4,7 +4,7 @@ from datetime import datetime
 DB_PATH = os.path.join(os.path.dirname(__file__), "memory.db")
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
@@ -43,11 +43,11 @@ def init_db():
 init_db()
 
 def get_db_connection():
-    return sqlite3.connect(DB_PATH)
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 # --- Conversation Operations ---
 def create_conversation(title):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("INSERT INTO conversations (title) VALUES (?)", (title,))
     conversation_id = c.lastrowid
@@ -56,7 +56,7 @@ def create_conversation(title):
     return conversation_id
 
 def list_conversations():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("SELECT id, title, created_at FROM conversations ORDER BY created_at DESC")
     conversations = c.fetchall()
@@ -65,7 +65,7 @@ def list_conversations():
 
 # --- Message Memory Operations ---
 def add_message(conversation_id, role, content):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)",
               (conversation_id, role, content))
@@ -73,7 +73,7 @@ def add_message(conversation_id, role, content):
     conn.close()
 
 def get_conversation_messages(conversation_id):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY timestamp",
               (conversation_id,))
@@ -83,7 +83,7 @@ def get_conversation_messages(conversation_id):
 
 # --- Queue Operations ---
 def queue_prompt(conversation_id, user_input, model, system_prompt):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("""
         INSERT INTO chat_queue (conversation_id, user_input, model, system_prompt)
@@ -95,7 +95,7 @@ def queue_prompt(conversation_id, user_input, model, system_prompt):
     return queue_id
 
 def claim_next_job():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.isolation_level = None
     c = conn.cursor()
     try:
@@ -137,7 +137,7 @@ def save_assistant_message(conversation_id, content):
     add_message(conversation_id, "assistant", content)
 
 def mark_job_done(job_id, failed=False, result_text=None):
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     status = 'done' if not failed else 'error'
     c.execute("""
