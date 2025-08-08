@@ -234,3 +234,19 @@ def get_job(job_id: int):
         "created_at": r[7],
         "processed_at": r[8],
     }
+
+def last_model_for_conversation(conversation_id: str) -> str | None:
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT model
+        FROM chat_queue
+        WHERE conversation_id = ?
+          AND model IS NOT NULL
+        ORDER BY id DESC
+        LIMIT 1
+    """, (conversation_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
+
