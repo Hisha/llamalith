@@ -9,8 +9,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 import uvicorn
-
 from auth_utils import verify_password, require_login
 from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_jobs, get_job, list_conversations, ensure_conversation
 
@@ -58,6 +58,24 @@ async def chat_ui(request: Request):
 async def get_conversation(conversation_id: str):
     return {"messages": get_conversation_messages(conversation_id)}
 
+# List recent jobs (optionally by status)
+@app.get("/api/jobs")
+async def list_jobs_api(status: Optional[str] = None,
+                        conversation_id: Optional[str] = None,
+                        limit: int = 100):
+    # conversation_id comes in as str from URL; keep None or cast if not None
+    conv_id = int(conversation_id) if conversation_id is not None and conversation_id.isdigit() else conversation_id
+    jobs = list_jobs(conversation_id=conv_id, status=status, limit=limit)
+    return {"jobs": jobs}
+
+# Get job details (status + result)
+@app.get("/api/jobs/{job_id}")
+async def get_job_api(job_id: int):
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
 @app.get("/api/status/{conversation_id}")
 async def check_status(conversation_id: str):
     conn = get_db_connection()
@@ -72,19 +90,6 @@ async def check_status(conversation_id: str):
     row = c.fetchone()
     conn.close()
     return {"response": row[0] if row else None}
-
-# List recent jobs (optionally by status)
-@app.get("/api/jobs")
-async def list_jobs_api(status: str = Query(None)):
-    return {"jobs": list_jobs(status=status)}
-
-# Get job details (status + result)
-@app.get("/api/jobs/{job_id}")
-async def get_job_api(job_id: int):
-    job = get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
 
 @app.get("/conversations", response_class=HTMLResponse)
 async def conversations_page(request: Request):
