@@ -1,6 +1,7 @@
 import os
 import sqlite3
 from datetime import datetime
+from typing import Optional, List, Dict, Any
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "memory.db")
 
@@ -217,27 +218,44 @@ def get_conversation(conversation_id: str):
     conn.close()
     return row  # (id, title, created_at) or None
 
-def list_jobs(conversation_id: int = None, limit: int = 100):
+def list_jobs(conversation_id: Optional[int] = None,
+              status: Optional[str] = None,
+              limit: int = 100) -> List[Dict[str, Any]]:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
-    if conversation_id:
-        c.execute("""
-            SELECT id, conversation_id, model, status, created_at, processed_at
-            FROM chat_queue
-            WHERE conversation_id = ?
-            ORDER BY created_at DESC
-            LIMIT ?
-        """, (conversation_id, limit))
-    else:
-        c.execute("""
-            SELECT id, conversation_id, model, status, created_at, processed_at
-            FROM chat_queue
-            ORDER BY created_at DESC
-            LIMIT ?
-        """, (limit,))
+
+    where = []
+    params = []
+
+    if conversation_id is not None:
+        where.append("conversation_id = ?")
+        params.append(conversation_id)
+    if status is not None:
+        where.append("status = ?")
+        params.append(status)
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    c.execute(f"""
+        SELECT id, conversation_id, model, status, created_at, processed_at
+        FROM chat_queue
+        {where_sql}
+        ORDER BY created_at DESC
+        LIMIT ?
+    """, (*params, limit))
     rows = c.fetchall()
     conn.close()
-    return rows  # list of tuples
+
+    return [
+        {
+            "id": r[0],
+            "conversation_id": r[1],
+            "model": r[2],
+            "status": r[3],
+            "created_at": r[4],
+            "processed_at": r[5],
+        }
+        for r in rows
+    ]
 
 def ensure_conversation(conversation_id: str):
     """Create a placeholder conversation row if it doesn't exist yet."""
