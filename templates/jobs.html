@@ -64,6 +64,12 @@ async function loadJobs() {
   document.getElementById('jobs-body').innerHTML = html;
 }
 
+document.getElementById('system_preset').addEventListener('change', (e) => {
+  const val = e.target.value || '';
+  const field = document.getElementById('system_prompt');
+  if (val) field.value = val;  // overwrite; if you prefer append, do: field.value = (field.value + ' ' + val).trim();
+});
+  
 async function viewJob(jobId){
   const job = await (await fetch(`${BASE}/api/jobs/${jobId}`)).json();
   const msgs = await (await fetch(`${BASE}/api/conversations/${job.conversation_id}/messages`)).json();
@@ -129,26 +135,19 @@ async function replyJob(e, conversationId, jobId){
 document.getElementById('create-job').onsubmit = async (e) => {
   e.preventDefault();
   try {
-    const convEl = document.getElementById('conversation_id');
-    const modelEl = document.getElementById('model');
-    const sysEl   = document.getElementById('system_prompt');
+    const model = document.getElementById('model').value;
+    const sysEl = document.getElementById('system_prompt');
     const contentEl = document.getElementById('content');
 
-    const convVal = (convEl.value || "").trim();
-    const model = modelEl.value;
     const system_prompt = (sysEl.value || "").trim();
     const content = (contentEl.value || "").trim();
 
-    // Require at least one of these to avoid silent no-op.
     if (!content && !system_prompt) {
       alert("Enter a prompt or a system prompt.");
       return;
     }
 
     const payload = { model, system_prompt, content };
-    if (convVal) payload.conversation_id = convVal;
-
-    console.log("POST /api/jobs payload:", payload);
     const res = await fetch(`${BASE}/api/jobs`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -157,23 +156,14 @@ document.getElementById('create-job').onsubmit = async (e) => {
 
     if (!res.ok) {
       const txt = await res.text().catch(()=>"");
-      console.error("Create job failed:", res.status, txt);
       alert(`Server error ${res.status}: ${txt || 'see logs'}`);
       return;
     }
 
-    const data = await res.json().catch(()=> ({}));
-    console.log("Create job ok:", data);
-
-    // Clear inputs only after successful POST
-    convEl.value = "";
     sysEl.value = "";
     contentEl.value = "";
-
-    // Refresh list
     await loadJobs();
   } catch (err) {
-    console.error("Create job exception:", err);
     alert(`Create job failed: ${err?.message || err}`);
   }
 };
