@@ -207,3 +207,46 @@ def get_job(job_id: int):
         "processed_at": r[8],
     }
 
+# --- Extra helpers for conversations / jobs ---
+
+def get_conversation(conversation_id: str):
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
+    c.execute("SELECT id, title, created_at FROM conversations WHERE id = ?", (conversation_id,))
+    row = c.fetchone()
+    conn.close()
+    return row  # (id, title, created_at) or None
+
+def list_jobs(conversation_id: int = None, limit: int = 100):
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
+    if conversation_id:
+        c.execute("""
+            SELECT id, conversation_id, model, status, created_at, processed_at
+            FROM chat_queue
+            WHERE conversation_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (conversation_id, limit))
+    else:
+        c.execute("""
+            SELECT id, conversation_id, model, status, created_at, processed_at
+            FROM chat_queue
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows  # list of tuples
+
+def ensure_conversation(conversation_id: str):
+    """Create a placeholder conversation row if it doesn't exist yet."""
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c = conn.cursor()
+    c.execute("SELECT id FROM conversations WHERE id = ?", (conversation_id,))
+    row = c.fetchone()
+    if not row:
+        c.execute("INSERT INTO conversations (id, title) VALUES (?, ?)", (conversation_id, f"Session {conversation_id}"))
+        conn.commit()
+    conn.close()
+
