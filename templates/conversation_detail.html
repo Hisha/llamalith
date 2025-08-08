@@ -64,7 +64,10 @@
     </div>
     <div>
       <label class="block text-sm mb-1">System Prompt (optional)</label>
-      <textarea name="system_prompt" rows="3" class="w-full p-2 bg-gray-700 rounded text-gray-100"></textarea>
+      <textarea name="system_prompt"
+          class="w-full bg-gray-700 p-2 rounded"
+          rows="3"
+          placeholder="System prompt (optional)">{{ last_system_prompt or '' }}</textarea>
     </div>
     <div>
       <label class="block text-sm mb-1">Your message</label>
