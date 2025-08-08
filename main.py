@@ -21,6 +21,9 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 templates = Jinja2Templates(directory="templates")
 templates.env.globals["root_path"] = "/chat/"
 
+AVAILABLE_MODELS = [m.strip() for m in os.getenv("LLM_MODELS", "mistral,mythomax").split(",") if m.strip()]
+templates.env.globals["AVAILABLE_MODELS"] = AVAILABLE_MODELS
+
 # Request body format for API
 class ChatRequest(BaseModel):
     user_input: str
