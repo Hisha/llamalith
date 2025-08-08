@@ -1,4 +1,5 @@
-# app/queue_worker.py
+#queue_worker.py
+import os
 import multiprocessing
 import time
 import sys
