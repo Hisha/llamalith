@@ -78,6 +78,14 @@ async def check_status(conversation_id: str):
 async def list_jobs_api(status: str = Query(None)):
     return {"jobs": list_jobs(status=status)}
 
+@app.get("/jobs", response_class=HTMLResponse)
+async def jobs_ui(request: Request):
+    require_login(request)
+    return templates.TemplateResponse("jobs.html", {
+        "request": request,
+        "now": datetime.now
+    })
+
 # Get job details (status + result)
 @app.get("/api/jobs/{job_id}")
 async def get_job_api(job_id: int):
