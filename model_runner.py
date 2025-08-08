@@ -2,6 +2,8 @@ from llama_cpp import Llama
 import os
 import json
 
+SAFETY_MARGIN = int(os.getenv("LLM_SAFETY_MARGIN", "128"))
+
 # Load model paths from config file or environment
 CONFIG_PATH = os.getenv("LLAMALITH_CONFIG", "config.json")
 if os.path.exists(CONFIG_PATH):
@@ -52,15 +54,25 @@ def format_messages(messages):
     return prompt
 
 # Run a model with message history
-def run_model(model_key, messages):
-    model = get_model(model_key)
-    prompt = format_messages(messages)
+def run_model(model_key: str, messages: list[dict]) -> str:
+    llm = get_llama_instance(model_key)  # your loader with n_threads set (see below)
+    n_ctx = getattr(llm, "n_ctx", lambda: 4096)()
+    # build your chat prompt string or tokens
+    prompt = format_chat(messages)         # your function
+    prompt_tokens = llm.tokenize(prompt.encode("utf-8"))
+    remaining = max(256, n_ctx - len(prompt_tokens) - SAFETY_MARGIN)  # elastic
 
-    output = model(
-        prompt,
-        max_tokens=config.get("model_settings", {}).get(model_key, {}).get("max_tokens", MAX_TOKENS),
-        stop=["[USER]", "[SYSTEM]", "[ASSISTANT]"],
-        echo=False
+    resp = llm.create_chat_completion(
+        messages=messages,
+        # sampling knobs via env if you like
+        temperature=float(os.getenv("LLM_TEMP", "0.7")),
+        top_p=float(os.getenv("LLM_TOP_P", "0.95")),
+        top_k=int(os.getenv("LLM_TOP_K", "40")),
+        repeat_penalty=float(os.getenv("LLM_REPEAT_PENALTY", "1.1")),
+        mirostat_mode=int(os.getenv("LLM_MIROS", "0")),       # 0/1/2
+        mirostat_tau=float(os.getenv("LLM_MIROS_TAU", "5.0")),
+        mirostat_eta=float(os.getenv("LLM_MIROS_ETA", "0.1")),
+        stop=["</s>", "\nUser:", "\nuser:", "\n###", "\nAssistant:"],
+        max_tokens=remaining,
     )
-
-    return output["choices"][0]["text"].strip()
+    return resp["choices"][0]["message"]["content"].strip()
