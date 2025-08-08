@@ -44,6 +44,23 @@ class ReplyRequest(BaseModel):
     content: str
     system_prompt: str = ""
 
+def status_badge(status: str) -> str:
+    colors = {
+        "done":       "bg-green-600",
+        "processing": "bg-blue-600",
+        "queued":     "bg-yellow-500",
+        "error":      "bg-red-600",
+        "failed":     "bg-red-600",
+    }
+    dot = colors.get(status.lower(), "bg-gray-500")
+    # dot + pill text
+    return f'''
+      <span class="inline-flex items-center gap-2 px-2 py-1 rounded-full bg-gray-800 border border-gray-700 text-xs">
+        <span class="inline-block w-2.5 h-2.5 rounded-full {dot}"></span>
+        <span class="uppercase tracking-wide">{status}</span>
+      </span>
+    '''
+
 #####################################################################################
 #                                   GET                                             #
 #####################################################################################
@@ -125,6 +142,24 @@ async def jobs_ui(request: Request):
         "request": request,
         "now": datetime.now
     })
+
+@app.get("/jobs/rows", response_class=HTMLResponse)
+async def jobs_rows(status: Optional[str] = None, limit: int = 100):
+    rows = list_jobs(status=status, limit=limit)
+    html = []
+    for j in rows:
+        badge = status_badge(j["status"])
+        html.append(f"""
+          <tr>
+            <td>{j['id']}</td>
+            <td>{j['conversation_id']}</td>
+            <td>{j['model']}</td>
+            <td>{badge}</td>
+            <td>{j.get('created_at','')}</td>
+            <td><button class="underline text-sm" onclick="viewJob({j['id']})">View</button></td>
+          </tr>
+        """)
+    return "\n".join(html)
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
