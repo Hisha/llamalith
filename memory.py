@@ -10,7 +10,7 @@ def init_db():
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT PRIMARY KEY,
             title TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
