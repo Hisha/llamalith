@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional
 import uvicorn
 from auth_utils import verify_password, require_login
-from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_jobs, get_job, list_conversations, ensure_conversation, create_conversation
+from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_conversations, ensure_conversation, create_conversation
 
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
