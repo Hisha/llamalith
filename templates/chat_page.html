@@ -45,7 +45,6 @@
   const modelSelect = document.getElementById('model-select');
   const systemPrompt = document.getElementById('system-prompt');
   const loader = document.getElementById('loader');
-  const basePath = '/chat';
   const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
   localStorage.setItem('session_id', sessionId);
 
@@ -60,7 +59,7 @@
   async function pollForResponse() {
     for (let i = 0; i < 60; i++) {  // Up to ~30s of polling
       await new Promise(res => setTimeout(res, 500));
-      const res = await fetch(`/api/status/${sessionId}`);
+      const res = await fetch(`/chat/api/status/${sessionId}`);
       const data = await res.json();
       if (data.response) {
         appendMessage('assistant', data.response);
@@ -82,7 +81,7 @@
     loader.classList.remove('hidden');
 
     try {
-      const res = await fetch('/api/submit', {
+      const res = await fetch('/chat/api/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
