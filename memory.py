@@ -66,7 +66,7 @@ def list_conversations():
     return conversations
 
 # --- Message Memory Operations ---
-def add_message(conversation_id, role, content):
+def add_message(conversation_id, role, content, model=None):
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
     c.execute("INSERT INTO messages (conversation_id, role, model, content) VALUES (?, ?, ?, ?)",
