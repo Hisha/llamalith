@@ -146,9 +146,7 @@ async def reply_conversation(conversation_id: str, body: ReplyRequest):
     return {"job_id": job_id}
 
 @app.post("/api/jobs")
-async def create_job(
-    payload: dict = Body(...)
-):
+async def create_job(payload: dict = Body(...)):
     # expected: { "content": str, "model": str, "conversation_id": optional, "system_prompt": optional }
     content = (payload.get("content") or "").strip()
     model = (payload.get("model") or "mistral").strip()
@@ -158,26 +156,16 @@ async def create_job(
     if not content:
         return JSONResponse({"error": "content is required"}, status_code=400)
 
-    created_new = False
-
-    # Determine conversation ID
-    if not conv_id_raw:
-        # Create new conversation
-        title = content[:60] or "New Conversation"
-        conversation_id = create_conversation(title=title)
-        created_new = True
+    if conv_id_raw:
+        # Use provided UUID, ensure conversation exists
+        conversation_id = ensure_conversation(conv_id_raw, title=content[:60])
+        created_new = False
     else:
-        try:
-            # Try numeric ID first
-            conversation_id = int(conv_id_raw)
-        except ValueError:
-            # Use UUID string directly
-            conversation_id = conv_id_raw
+        # Create a new UUID conversation
+        conversation_id = create_conversation(title=content[:60])
+        created_new = True
 
-    # Save user's message
-    add_message(conversation_id, "user", content, model=model)
-
-    # Queue processing
+    add_message(conversation_id, "user", content)
     job_id = queue_prompt(conversation_id, content, model, system_prompt)
 
     return {
