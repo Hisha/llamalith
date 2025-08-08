@@ -117,17 +117,29 @@ document.getElementById('refresh').onclick = loadJobs;
 
 document.getElementById('create-job').onsubmit = async (e) => {
   e.preventDefault();
-  const conversation_id = document.getElementById('conversation_id').value.trim() || crypto.randomUUID();
+
+  const convVal = document.getElementById('conversation_id').value.trim();
   const model = document.getElementById('model').value;
   const system_prompt = document.getElementById('system_prompt').value;
   const content = document.getElementById('content').value.trim();
+
   if (!content) return;
+
+  const payload = { model, content, system_prompt };
+  if (convVal) {
+    payload.conversation_id = convVal;
+  }
+
   await fetch(`${BASE}/api/jobs`, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ conversation_id, model, content, system_prompt })
+    body: JSON.stringify(payload)
   });
+
+  // Clear fields after creating the job
+  document.getElementById('conversation_id').value = '';
   document.getElementById('content').value = '';
+
   await loadJobs();
 };
 
