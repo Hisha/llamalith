@@ -1,5 +1,4 @@
 #queue_worker.py
-import os
 import multiprocessing
 import time
 import sys
