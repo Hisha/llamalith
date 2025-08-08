@@ -74,8 +74,19 @@ async def logout(request: Request):
 async def submit_chat(data: ChatRequest):
     conversation_id = data.session_id  # session_id == conversation_id
 
-    # Save user's message
-    add_message(conversation_id, "user", data.user_input)
+    # Prevent duplicate consecutive user messages
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT role, content FROM messages
+        WHERE conversation_id = ?
+        ORDER BY timestamp DESC LIMIT 1
+    """, (conversation_id,))
+    last_msg = c.fetchone()
+    conn.close()
+
+    if not last_msg or last_msg[0] != "user" or last_msg[1] != data.user_input:
+        add_message(conversation_id, "user", data.user_input)
 
     # Queue the job
     job_id = queue_prompt(conversation_id, data.user_input, data.model, data.system_prompt)
