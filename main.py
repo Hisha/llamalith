@@ -185,29 +185,33 @@ async def reply_conversation(conversation_id: str, body: ReplyRequest):
 
 @app.post("/api/jobs")
 async def create_job(payload: dict = Body(...)):
-    # expected: { "content": str, "model": str, "conversation_id": optional, "system_prompt": optional }
     content = (payload.get("content") or "").strip()
     model = (payload.get("model") or "mistral").strip()
     system_prompt = (payload.get("system_prompt") or "").strip()
     conv_id_raw = (payload.get("conversation_id") or "").strip()
 
-    if not content:
-        return JSONResponse({"error": "content is required"}, status_code=400)
+    if not content and not system_prompt:
+        return JSONResponse({"error": "content or system_prompt is required"}, status_code=400)
 
+    title_seed = (content or system_prompt)[:60]
     if conv_id_raw:
-        # Use provided UUID, ensure conversation exists
-        conversation_id = ensure_conversation(conv_id_raw, title=content[:60])
+        conversation_id = ensure_conversation(conv_id_raw, title=title_seed)
         created_new = False
     else:
-        # Create a new UUID conversation
-        conversation_id = create_conversation(title=content[:60])
+        conversation_id = create_conversation(title=title_seed)
         created_new = True
 
-    add_message(conversation_id, "user", content)
-    job_id = queue_prompt(conversation_id, content, model, system_prompt)
+    if system_prompt:
+        add_message(conversation_id, "system", system_prompt)
+
+    job_id = None
+    if content:
+        add_message(conversation_id, "user", content)
+        job_id = queue_prompt(conversation_id, content, model, system_prompt)
 
     return {
         "ok": True,
+        "queued": bool(job_id),
         "job_id": job_id,
         "conversation_id": conversation_id,
         "created_new": created_new,
