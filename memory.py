@@ -19,6 +19,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             conversation_id INTEGER,
             role TEXT,
+            model TEXT,
             content TEXT,
             timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(conversation_id) REFERENCES conversations(id)
