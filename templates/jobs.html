@@ -58,12 +58,18 @@ async function loadJobs() {
 }
 
 async function viewJob(jobId){
-  const [jobRes, msgsRes] = await Promise.all([
-    fetch(`${BASE}/api/jobs/${jobId}`),
-    // fetch conversation once we know convo id
-  ]);
-  const job = await jobRes.json();
+  const job = await (await fetch(`${BASE}/api/jobs/${jobId}`)).json();
   const msgs = await (await fetch(`${BASE}/api/conversations/${job.conversation_id}/messages`)).json();
+
+  // Build a unified thread: include job.result only if it’s not already saved as a message
+  const thread = [...msgs.messages];
+  if (job.result) {
+    const alreadySaved = thread.some(m => m.role === 'assistant' && m.content === job.result);
+    if (!alreadySaved) {
+      thread.push({ role: 'assistant', content: job.result });
+    }
+  }
+
   jobDetail.classList.remove('hidden');
   jobDetail.innerHTML = `
     <div class="flex items-center justify-between">
@@ -72,10 +78,9 @@ async function viewJob(jobId){
     </div>
     <div class="text-xs text-gray-400">Model: ${job.model}</div>
     <div class="mt-4 space-y-2 max-h-80 overflow-y-auto bg-gray-900 p-3 rounded">
-      ${msgs.messages.map(m => `
+      ${thread.map(m => `
         <div><span class="text-gray-400">${m.role}</span>: ${m.content}</div>
       `).join('')}
-      ${job.result ? `<div><span class="text-gray-400">assistant</span>: ${job.result}</div>` : ''}
     </div>
 
     <form class="mt-4 space-y-2" onsubmit="return replyJob(event, '${job.conversation_id}', '${job.id}')">
