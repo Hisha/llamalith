@@ -19,6 +19,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 
 # Templates
 templates = Jinja2Templates(directory="templates")
+templates.env.globals["root_path"] = "/chat/"
 
 # Request body format for API
 class ChatRequest(BaseModel):
