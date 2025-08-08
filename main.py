@@ -48,7 +48,7 @@ class ReplyRequest(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 async def chat_ui(request: Request):
     require_login(request)
-    return templates.TemplateResponse("chat_page.html", {
+    return templates.TemplateResponse("jobs.html", {
         "request": request,
         "now": datetime.now
     })
