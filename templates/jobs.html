@@ -76,13 +76,11 @@ async function viewJob(jobId){
       ${job.result ? `<div><span class="text-gray-400">assistant</span>: ${job.result}</div>` : ''}
     </div>
 
-    <form class="mt-4 space-y-2" onsubmit="return replyJob(event, '${job.conversation_id}')">
-      <textarea id="reply-text" class="bg-gray-700 p-2 rounded w-full" rows="3" placeholder="Reply..."></textarea>
+    <form class="mt-4 space-y-2" onsubmit="return replyJob(event, '${job.conversation_id}', '${job.id}')">
+      <textarea id="reply-text-${job.id}" class="bg-gray-700 p-2 rounded w-full" rows="3" placeholder="Reply..."></textarea>
       <div class="flex gap-2">
-        <select id="reply-model" class="bg-gray-700 p-2 rounded">
-          <option value="${job.model}">${job.model}</option>
-          <option value="mistral">mistral</option>
-          <option value="mythomax">mythomax</option>
+        <select id="reply-model-${job.id}" class="bg-gray-700 p-2 rounded">
+          ${modelOptionsHTML(job.model)}
         </select>
         <button class="bg-indigo-600 hover:bg-indigo-500 rounded px-3 py-2">Send</button>
       </div>
@@ -90,16 +88,27 @@ async function viewJob(jobId){
   `;
 }
 
-async function replyJob(e, conversationId){
+const ALL_MODELS = ["mistral", "mythomax"];
+
+function modelOptionsHTML(jobModel) {
+  const models = Array.from(new Set([jobModel, ...ALL_MODELS]));
+  return models
+    .map(m => `<option value="${m}" ${m === jobModel ? "selected" : ""}>${m}</option>`)
+    .join("");
+}
+  
+async function replyJob(e, conversationId, jobId){
   e.preventDefault();
-  const content = document.getElementById('reply-text').value.trim();
-  const model = document.getElementById('reply-model').value;
+  const content = document.getElementById(`reply-text-${jobId}`).value.trim();
+  const model = document.getElementById(`reply-model-${jobId}`).value;
   if (!content) return false;
+
   await fetch(`${BASE}/api/conversations/${conversationId}/reply`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ model, content })
   });
+
   alert('Queued reply.');
   return false;
 }
