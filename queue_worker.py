@@ -1,13 +1,13 @@
 # app/queue_worker.py
 import multiprocessing
 import time
-from app.memory import (
+from memory import (
     claim_next_job,
     get_conversation_messages,
     save_assistant_message,
     mark_job_done,
 )
-from app.model_runner import run_model
+from model_runner import run_model
 
 POLL_SEC = 1
 NUM_WORKERS = 2
