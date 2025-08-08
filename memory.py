@@ -2,6 +2,7 @@
 import os
 import sqlite3
 from datetime import datetime
+from Typing import Optional
 from uuid import uuid4
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "memory.db")
@@ -235,14 +236,14 @@ def get_job(job_id: int):
         "processed_at": r[8],
     }
 
-def last_model_for_conversation(conversation_id: str) -> str | None:
+def last_model_for_conversation(conversation_id: str) -> Optional[str]:
     conn = get_db_connection()
     c = conn.cursor()
     c.execute("""
         SELECT model
         FROM chat_queue
         WHERE conversation_id = ?
-          AND model IS NOT NULL
+          AND model IS NOT NULL AND TRIM(model) != ''
         ORDER BY id DESC
         LIMIT 1
     """, (conversation_id,))
