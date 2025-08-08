@@ -251,3 +251,15 @@ def last_model_for_conversation(conversation_id: str) -> Optional[str]:
     conn.close()
     return row[0] if row else None
 
+def last_system_for_conversation(conversation_id: str):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT content FROM messages
+        WHERE conversation_id = ? AND role = 'system'
+        ORDER BY timestamp DESC
+        LIMIT 1
+    """, (conversation_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
