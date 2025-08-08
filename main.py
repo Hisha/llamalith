@@ -11,8 +11,8 @@ from pydantic import BaseModel
 from datetime import datetime
 import uvicorn
 
-from app.auth_utils import verify_password, require_login
-from app.memory import add_message, queue_prompt, get_db_connection
+from auth_utils import verify_password, require_login
+from memory import add_message, queue_prompt, get_db_connection
 
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
