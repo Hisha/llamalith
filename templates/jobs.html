@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <h2 class="text-xl font-bold">Jobs</h2>
+
+  <!-- create job -->
+  <form id="create-job" class="bg-gray-800 p-4 rounded space-y-3">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <input id="conversation_id" class="bg-gray-700 p-2 rounded" placeholder="Conversation ID (e.g. session_id)" />
+      <select id="model" class="bg-gray-700 p-2 rounded">
+        <option value="mistral">mistral</option>
+        <option value="mythomax">mythomax</option>
+      </select>
+      <input id="system_prompt" class="bg-gray-700 p-2 rounded" placeholder="System prompt (optional)" />
+      <button class="bg-indigo-600 hover:bg-indigo-500 rounded px-3 py-2">Create Job</button>
+    </div>
+    <textarea id="content" class="bg-gray-700 p-2 rounded w-full mt-2" rows="3" placeholder="Your prompt..."></textarea>
+  </form>
+
+  <!-- jobs list -->
+  <div>
+    <div class="flex items-center justify-between">
+      <h3 class="font-semibold">Recent Jobs</h3>
+      <button id="refresh" class="text-sm underline">Refresh</button>
+    </div>
+    <table class="w-full text-sm mt-2">
+      <thead class="text-gray-400">
+        <tr><th class="text-left">ID</th><th class="text-left">Conversation</th><th class="text-left">Model</th><th class="text-left">Status</th><th class="text-left">Created</th><th></th></tr>
+      </thead>
+      <tbody id="jobs-body" class="divide-y divide-gray-700"></tbody>
+    </table>
+  </div>
+
+  <!-- job detail -->
+  <div id="job-detail" class="bg-gray-800 p-4 rounded hidden"></div>
+</div>
+
+<script>
+const BASE = "{{ request.scope.root_path or '' }}";
+const jobsBody = document.getElementById('jobs-body');
+const jobDetail = document.getElementById('job-detail');
+
+async function loadJobs() {
+  const res = await fetch(`${BASE}/api/jobs`);
+  const data = await res.json();
+  jobsBody.innerHTML = data.jobs.map(j => `
+    <tr>
+      <td>${j.id}</td>
+      <td>${j.conversation_id}</td>
+      <td>${j.model}</td>
+      <td>${j.status}</td>
+      <td>${j.created_at || ''}</td>
+      <td><button class="underline text-sm" onclick="viewJob(${j.id})">View</button></td>
+    </tr>
+  `).join('');
+}
+
+async function viewJob(jobId){
+  const [jobRes, msgsRes] = await Promise.all([
+    fetch(`${BASE}/api/jobs/${jobId}`),
+    // fetch conversation once we know convo id
+  ]);
+  const job = await jobRes.json();
+  const msgs = await (await fetch(`${BASE}/api/conversations/${job.conversation_id}/messages`)).json();
+  jobDetail.classList.remove('hidden');
+  jobDetail.innerHTML = `
+    <div class="flex items-center justify-between">
+      <div class="font-semibold">Job #${job.id} — <span class="uppercase">${job.status}</span></div>
+      <button class="text-sm underline" onclick="loadJobs()">Back to list</button>
+    </div>
+    <div class="text-xs text-gray-400">Model: ${job.model}</div>
+    <div class="mt-4 space-y-2 max-h-80 overflow-y-auto bg-gray-900 p-3 rounded">
+      ${msgs.messages.map(m => `
+        <div><span class="text-gray-400">${m.role}</span>: ${m.content}</div>
+      `).join('')}
+      ${job.result ? `<div><span class="text-gray-400">assistant</span>: ${job.result}</div>` : ''}
+    </div>
+
+    <form class="mt-4 space-y-2" onsubmit="return replyJob(event, '${job.conversation_id}')">
+      <textarea id="reply-text" class="bg-gray-700 p-2 rounded w-full" rows="3" placeholder="Reply..."></textarea>
+      <div class="flex gap-2">
+        <select id="reply-model" class="bg-gray-700 p-2 rounded">
+          <option value="${job.model}">${job.model}</option>
+          <option value="mistral">mistral</option>
+          <option value="mythomax">mythomax</option>
+        </select>
+        <button class="bg-indigo-600 hover:bg-indigo-500 rounded px-3 py-2">Send</button>
+      </div>
+    </form>
+  `;
+}
+
+async function replyJob(e, conversationId){
+  e.preventDefault();
+  const content = document.getElementById('reply-text').value.trim();
+  const model = document.getElementById('reply-model').value;
+  if (!content) return false;
+  await fetch(`${BASE}/api/conversations/${conversationId}/reply`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ model, content })
+  });
+  alert('Queued reply.');
+  return false;
+}
+
+document.getElementById('refresh').onclick = loadJobs;
+
+document.getElementById('create-job').onsubmit = async (e) => {
+  e.preventDefault();
+  const conversation_id = document.getElementById('conversation_id').value.trim() || crypto.randomUUID();
+  const model = document.getElementById('model').value;
+  const system_prompt = document.getElementById('system_prompt').value;
+  const content = document.getElementById('content').value.trim();
+  if (!content) return;
+  await fetch(`${BASE}/api/jobs`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ conversation_id, model, content, system_prompt })
+  });
+  document.getElementById('content').value = '';
+  await loadJobs();
+};
+
+loadJobs();
+</script>
+{% endblock %}
