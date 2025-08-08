@@ -28,7 +28,13 @@
       <thead class="text-gray-400">
         <tr><th class="text-left">ID</th><th class="text-left">Conversation</th><th class="text-left">Model</th><th class="text-left">Status</th><th class="text-left">Created</th><th></th></tr>
       </thead>
-      <tbody id="jobs-body" class="divide-y divide-gray-700"></tbody>
+      <tbody
+        id="jobs-body"
+        class="divide-y divide-gray-700"
+        hx-get="{{ request.scope.root_path }}/jobs/rows"
+        hx-trigger="load, every 30s"
+        hx-swap="innerHTML">
+      </tbody>
     </table>
   </div>
 
