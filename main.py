@@ -12,7 +12,7 @@ from datetime import datetime
 import uvicorn
 
 from auth_utils import verify_password, require_login
-from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_jobs, get_job
+from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_jobs, get_job, list_conversations, ensure_conversation
 
 app = FastAPI(root_path="/chat")
 app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
@@ -78,14 +78,6 @@ async def check_status(conversation_id: str):
 async def list_jobs_api(status: str = Query(None)):
     return {"jobs": list_jobs(status=status)}
 
-@app.get("/jobs", response_class=HTMLResponse)
-async def jobs_ui(request: Request):
-    require_login(request)
-    return templates.TemplateResponse("jobs.html", {
-        "request": request,
-        "now": datetime.now
-    })
-
 # Get job details (status + result)
 @app.get("/api/jobs/{job_id}")
 async def get_job_api(job_id: int):
@@ -93,6 +85,38 @@ async def get_job_api(job_id: int):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+@app.get("/conversations", response_class=HTMLResponse)
+async def conversations_page(request: Request):
+    require_login(request)
+    convos = list_conversations()
+    return templates.TemplateResponse("conversations.html", {
+        "request": request,
+        "conversations": convos,
+        "now": datetime.now
+    })
+
+@app.get("/conversations/{conversation_id}", response_class=HTMLResponse)
+async def conversation_detail(request: Request, conversation_id: str):
+    require_login(request)
+    ensure_conversation(conversation_id)
+    messages = get_conversation_messages(conversation_id)
+    jobs = list_jobs(conversation_id=conversation_id, limit=50)
+    return templates.TemplateResponse("conversation_detail.html", {
+        "request": request,
+        "conversation_id": conversation_id,
+        "messages": messages,
+        "jobs": jobs,
+        "now": datetime.now
+    })
+
+@app.get("/jobs", response_class=HTMLResponse)
+async def jobs_ui(request: Request):
+    require_login(request)
+    return templates.TemplateResponse("jobs.html", {
+        "request": request,
+        "now": datetime.now
+    })
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
@@ -145,6 +169,24 @@ async def submit_chat(data: ChatRequest):
 
     job_id = queue_prompt(conversation_id, data.user_input, data.model, data.system_prompt)
     return JSONResponse({"job_id": job_id})
+
+@app.post("/conversations/{conversation_id}/reply")
+async def conversation_reply(
+    request: Request,
+    conversation_id: str,
+    user_input: str = Form(...),
+    model: str = Form("mistral"),
+    system_prompt: str = Form(""),
+):
+    require_login(request)
+    # de-dupe last message logic optional; keep simple:
+    add_message(conversation_id, "user", user_input)
+    job_id = queue_prompt(conversation_id, user_input, model, system_prompt)
+    # back to the conversation page
+    return RedirectResponse(
+        url=f"{request.scope.get('root_path','')}/conversations/{conversation_id}",
+        status_code=303
+    )
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, password: str = Form(...)):
