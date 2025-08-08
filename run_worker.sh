@@ -12,4 +12,4 @@ export LLAMALITH_CONFIG=config.json
 export PYTHONUNBUFFERED=1
 
 # Run the queue worker
-python -u app/queue_worker.py
+python -u queue_worker.py
