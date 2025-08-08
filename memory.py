@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import datetime
 
-DB_PATH = "app/memory.db"
+DB_PATH = "memory.db"
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
