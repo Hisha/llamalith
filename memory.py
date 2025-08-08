@@ -18,7 +18,7 @@ def init_db():
     c.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            conversation_id INTEGER,
+            conversation_id TEXT,
             role TEXT,
             model TEXT,
             content TEXT,
@@ -29,7 +29,7 @@ def init_db():
     c.execute("""
         CREATE TABLE IF NOT EXISTS chat_queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            conversation_id INTEGER,
+            conversation_id TEXT,
             user_input TEXT,
             model TEXT,
             system_prompt TEXT,
