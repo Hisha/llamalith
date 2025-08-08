@@ -139,7 +139,7 @@ async def logout(request: Request):
 
 @app.post("/api/conversations/{conversation_id}/reply")
 async def reply_conversation(conversation_id: str, body: ReplyRequest):
-    add_message(conversation_id, "user", body.content, model=body.model)
+    add_message(conversation_id, "user", body.content)  # ← remove model=...
     job_id = queue_prompt(conversation_id, body.content, body.model, body.system_prompt)
     return {"job_id": job_id}
 
@@ -176,22 +176,10 @@ async def create_job(payload: dict = Body(...)):
 
 @app.post("/api/submit")
 async def submit_chat(data: ChatRequest):
-    conversation_id = data.session_id  # session_id == conversation_id
-
-    # Prevent duplicate consecutive user messages
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("""
-        SELECT role, content FROM messages
-        WHERE conversation_id = ?
-        ORDER BY timestamp DESC LIMIT 1
-    """, (conversation_id,))
-    last_msg = c.fetchone()
-    conn.close()
-
+    conversation_id = data.session_id
+    # ... keep your de-dupe query ...
     if not last_msg or last_msg[0] != "user" or last_msg[1] != data.user_input:
-        # 👇 persist which model this prompt targets
-        add_message(conversation_id, "user", data.user_input, model=data.model)
+        add_message(conversation_id, "user", data.user_input)  # ← remove model=...
 
     job_id = queue_prompt(conversation_id, data.user_input, data.model, data.system_prompt)
     return JSONResponse({"job_id": job_id})
