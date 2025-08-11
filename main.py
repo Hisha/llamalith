@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
-from auth_utils import verify_password, require_login, require_bearer_token
+from auth_utils import verify_password, require_login, require_api_auth
+
 from memory import (
     add_message,
     queue_prompt,
@@ -187,12 +188,12 @@ async def logout(request: Request):
 # -------------------- Protected API (token required) --------------------
 
 # Full conversation thread
-@app.get("/api/conversations/{conversation_id}/messages", dependencies=[Depends(require_bearer_token)])
+@app.get("/api/conversations/{conversation_id}/messages", dependencies=[Depends(require_api_auth)])
 async def get_conversation(conversation_id: str):
     return {"messages": get_conversation_messages(conversation_id)}
 
 # Latest assistant/user message + last job (handy for polling)
-@app.get("/api/conversations/{conversation_id}/latest", dependencies=[Depends(require_bearer_token)])
+@app.get("/api/conversations/{conversation_id}/latest", dependencies=[Depends(require_api_auth)])
 async def get_latest(conversation_id: str):
     msgs = get_conversation_messages(conversation_id) or []
     last_user = next((m for m in reversed(msgs) if m.get("role") == "user"), None)
@@ -202,7 +203,7 @@ async def get_latest(conversation_id: str):
     return {"last_user": last_user, "last_assistant": last_assistant, "last_job": last_job}
 
 # Back-compat: previous simple status shape
-@app.get("/api/status/{conversation_id}", dependencies=[Depends(require_bearer_token)])
+@app.get("/api/status/{conversation_id}", dependencies=[Depends(require_api_auth)])
 async def check_status(conversation_id: str):
     conn = get_db_connection()
     c = conn.cursor()
@@ -221,7 +222,7 @@ async def check_status(conversation_id: str):
     return {"response": row[0] if row else None}
 
 # List jobs (optionally by status/conversation)
-@app.get("/api/jobs", dependencies=[Depends(require_bearer_token)])
+@app.get("/api/jobs", dependencies=[Depends(require_api_auth)])
 async def list_jobs_api(
     status: Optional[str] = None,
     conversation_id: Optional[str] = None,
@@ -231,7 +232,7 @@ async def list_jobs_api(
     return {"jobs": jobs}
 
 # Single job details
-@app.get("/api/jobs/{job_id}", dependencies=[Depends(require_bearer_token)])
+@app.get("/api/jobs/{job_id}", dependencies=[Depends(require_api_auth)])
 async def get_job_api(job_id: int):
     job = get_job(job_id)
     if not job:
@@ -243,14 +244,14 @@ async def get_job_api(job_id: int):
 # ====================================================================
 
 # Reply within an existing conversation
-@app.post("/api/conversations/{conversation_id}/reply", dependencies=[Depends(require_bearer_token)])
+@app.post("/api/conversations/{conversation_id}/reply", dependencies=[Depends(require_api_auth)])
 async def reply_conversation(conversation_id: str, body: ReplyRequest):
     job_id = enqueue_user_message(conversation_id, body.content, body.model, body.system_prompt)
     # Preserve original minimal response shape
     return {"job_id": job_id}
 
 # Create-or-continue conversation and (optionally) enqueue work
-@app.post("/api/jobs", dependencies=[Depends(require_bearer_token)])
+@app.post("/api/jobs", dependencies=[Depends(require_api_auth)])
 async def create_job(payload: dict = Body(...)):
     content = (payload.get("content") or "").strip()
     model = (payload.get("model") or "mistral").strip()
@@ -282,7 +283,7 @@ async def create_job(payload: dict = Body(...)):
     }
 
 # Legacy submit alias (keeps old response shape)
-@app.post("/api/submit", dependencies=[Depends(require_bearer_token)])
+@app.post("/api/submit", dependencies=[Depends(require_api_auth)])
 async def submit_chat(data: ChatRequest):
     conversation_id = data.session_id
     job_id = enqueue_user_message(conversation_id, data.user_input, data.model, data.system_prompt)
