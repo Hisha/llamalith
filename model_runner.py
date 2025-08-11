@@ -50,7 +50,7 @@ def get_model(model_key: str) -> Llama:
         verbose=False,
     )
     _LOADED[model_key] = llm
-    print(f"[llamalith] loaded model={model_key} path={path} model_format={model_fmt}")
+    print(f"[llamalith] loaded model={model_key} path={path} model_format={model_format}")
     return llm
 
 # ---------- prompt helpers ----------
