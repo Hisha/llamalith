@@ -1,252 +1,240 @@
 # Llamalith
 
-A lightweight, self-hosted chat + job queue for local LLMs using **FastAPI**, **SQLite**, and **llama.cpp**.
-It gives you a small web UI to manage conversations and a simple REST API you can call from tools like **n8n**.
-
-> Default base path is `/chat` (set in `main.py`). So the UI lives at `http://HOST:PORT/chat/` and the API under `http://HOST:PORT/chat/api/...`.
+FastAPI-powered chat/queue UI with a simple job system, conversation threads, and **secure API access**. The web UI uses session login; the API accepts either a logged-in session **or** a Bearer token (for n8n/curl).
 
 ---
 
 ## Features
 
-- ✅ Local inference via `llama-cpp-python`
-- ✅ Simple conversation store (SQLite) with message history
-- ✅ Job queue + background worker(s) for async generation
-- ✅ Web UI (Jinja2 templates) with login
-- ✅ REST endpoints to submit prompts & poll results (great for n8n)
-- ✅ Multi‑model support via `config.json` or env vars
+* Web UI under `/chat` for conversations and jobs (Jinja2 templates)
+* Queue-based prompt submission to your model worker(s)
+* SQLite-backed conversations, messages, and jobs (see `memory.py`)
+* **Auth**:
+
+  * Browser/UI: session login (password-protected)
+  * API: **session OR Bearer token** (Authorization header)
+* Drop-in endpoints for n8n integrations
 
 ---
 
-## Getting Started
-
-### 1) Install
+## Quick Start
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+# 1) Python 3.10+ recommended
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+
+# 2) Set up .env (see below)
+
+# 3) Run
+uvicorn main:app --host 0.0.0.0 --port 8000
+# UI:    http://localhost:8000/chat
+# Docs:  http://localhost:8000/chat/docs (if enabled by your setup)
 ```
 
-### 2) Configure models
+### `.env` example
 
-You can point model **keys** (e.g., `mistral`, `mythomax`) to GGUF files either with a `config.json` **or** environment variables.
+```ini
+# Session and admin login
+SECRET_KEY=change_me_please
+# Generate a bcrypt hash for the admin password (see snippet below)
+ADMIN_PASSWORD_HASH=$2b$12$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-**Option A — `config.json`** (recommended):
+# API token for n8n/curl callers
+N8N_API_TOKEN=supersecrettokenvalue
 
-```jsonc
-{
-  "model_paths": {
-    "mistral":  "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf",
-    "mythomax": "models/mythomax-l2-13b.Q4_K_M.gguf"
-  }
-}
+# Available model names shown in UI dropdown
+LLM_MODELS=mistral,mythomax
 ```
-Then export:
+
+#### Generate `ADMIN_PASSWORD_HASH`
+
 ```bash
-export LLAMALITH_CONFIG=config.json
-```
-
-**Option B — environment variables:**
-
-```
-# Used if LLAMALITH_CONFIG is missing
-export MISTRAL_PATH=/abs/path/to/mistral.gguf
-export MYTHOMAX_PATH=/abs/path/to/mythomax.gguf
-```
-
-Tell the UI which model keys to show in the dropdown:
-```bash
-export LLM_MODELS="mistral,mythomax"
-```
-
-### 3) Set secrets / tuning (optional)
-
-```
-# Required for session cookies (UI login)
-export SECRET_KEY="some-long-random-string"
-
-# UI admin password (bcrypt hash). Generate one with:
-#   python - <<'PY'
-import bcrypt;print(bcrypt.hashpw(b"YOUR_PASS", bcrypt.gensalt()).decode())
+python - <<'PY'
+import bcrypt, getpass
+pwd = getpass.getpass('New admin password: ')
+print(bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode())
 PY
-export ADMIN_PASSWORD_HASH="$2b$12$..."
 ```
 
-**Generation knobs** (env vars in `model_runner.py`):
+Copy the printed hash into `.env` as `ADMIN_PASSWORD_HASH`.
 
-```
-export LLM_TEMP=0.7
-export LLM_TOP_P=0.95
-export LLM_TOP_K=40
-export LLM_REPEAT_PENALTY=1.1
-export LLM_MIROS=0          # mirostat 0/1/2
-export LLM_MIROS_TAU=5.0
-export LLM_MIROS_ETA=0.1
-export LLM_SAFETY_MARGIN=128  # keep some tokens for safety
-```
-
-### 4) Run the API & UI
-
-```bash
-# dev convenience script
-./run.sh
-# → serves at http://0.0.0.0:8000/chat/
-```
-
-### 5) Run the queue worker
-
-In a separate shell (or as a service):
-```bash
-./run_worker.sh
-```
-This starts `queue_worker.py` with multiple subprocesses (`NUM_WORKERS` inside that file).
+> **Fail-closed:** The app will raise on boot if `N8N_API_TOKEN` is missing.
 
 ---
 
-## Data model
+## Authentication Model
 
-- `conversations` — tracks conversation ids/titles
-- `messages` — `(conversation_id, role, content, timestamp)`
-- `chat_queue` — async work items: `(user_input, model, system_prompt, status, result, created_at, processed_at)`
+* **UI (browser)** → Session login at `/chat/login` (uses `ADMIN_PASSWORD_HASH`).
+* **API** → A route is protected if it uses `require_api_auth`. That guard allows:
 
-SQLite DB lives at `memory.db` beside `memory.py` (created automatically).
+  1. a **logged-in session**, or
+  2. a valid **Bearer token**: `Authorization: Bearer <N8N_API_TOKEN>` (or `X-API-Token`).
+
+This lets the web UI call `/api/*` without adding headers, while automation clients must send the token.
 
 ---
 
-## REST API
+## Endpoints
 
-> All paths below are **prefixed with `/chat`**.
+### Public (session-guarded pages)
 
-### Submit a prompt (create job)
+* `GET /chat/` → Jobs dashboard (requires session)
+* `GET /chat/conversations` → List conversations (session)
+* `GET /chat/conversations/{conversation_id}` → Conversation detail (session)
+* `GET /chat/jobs` → Jobs page (session)
+* `GET /chat/jobs/rows` → Table rows for jobs (session)
+* `GET /chat/login` → Login page
+* `POST /chat/login` → Submit password, start session
+* `GET /chat/logout` → Clear session
 
-`POST /chat/api/submit`
+> The app is created with `FastAPI(root_path="/chat")`, so URLs in logs may appear without the prefix when proxied. The UI paths above include `/chat`.
 
-Body:
-```json
-{
-  "user_input": "Write a 3-paragraph bedtime story about a friendly dragon.",
-  "model": "mistral",
-  "session_id": "story-123",           // this is your conversation_id
-  "system_prompt": "You are a gentle storyteller who writes soothing bedtime stories for kids age 4–7."
-}
+### Protected API (session **or** token)
+
+* `GET  /api/conversations/{conversation_id}/messages` → Full message thread
+* `GET  /api/conversations/{conversation_id}/latest` → Last user msg, last assistant msg, last job
+* `GET  /api/status/{conversation_id}` → **Back-compat:** last assistant text only
+* `GET  /api/jobs` → List jobs (optional `status`, `conversation_id`, `limit`)
+* `GET  /api/jobs/{job_id}` → Single job details
+* `POST /api/conversations/{conversation_id}/reply` → Enqueue a reply in an existing conversation
+* `POST /api/jobs` → Create-or-continue a conversation; optionally enqueue work
+* `POST /api/submit` → **Legacy alias** equivalent to posting a user message for a given session\_id
+
+All mutations share a single helper internally to add messages and enqueue work, so behavior is consistent.
+
+---
+
+## cURL Examples
+
+Export your token once:
+
+```bash
+export TOK="$(grep ^N8N_API_TOKEN .env | cut -d= -f2-)"
+```
+
+### Create/continue a conversation and enqueue
+
+```bash
+curl -sS -X POST http://localhost:8000/api/jobs \
+  -H "Authorization: Bearer $TOK" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "model": "mistral",
+        "content": "Write a 2-sentence bedtime story about a helpful dragon.",
+        "conversation_id": "abc123",              
+        "system_prompt": ""
+      }'
 ```
 
 Response:
-```json
-{ "job_id": 42 }
-```
 
-### Poll a job
-
-`GET /chat/api/jobs/{job_id}`
-
-Response:
 ```json
 {
-  "id": 42,
-  "conversation_id": "story-123",
-  "user_input": "Write a 3-paragraph bedtime story about a friendly dragon.",
-  "model": "mistral",
-  "system_prompt": "You are a gentle storyteller...",
-  "status": "queued | processing | done | error",
-  "result": "…assistant output (present when status=done)…",
-  "created_at": "...",
-  "processed_at": "..."
+  "ok": true,
+  "queued": true,
+  "job_id": 42,
+  "conversation_id": "abc123",
+  "created_new": false,
+  "model": "mistral"
 }
 ```
 
-### Quick “latest reply” by conversation (simple polling)
-
-`GET /chat/api/status/{conversation_id}` → returns
-```json
-{ "response": "last assistant message or null" }
-```
-
-### List jobs (optional)
-
-`GET /chat/api/jobs?conversation_id=story-123&status=processing&limit=50`
-
----
-
-## Example: remote API prompt (curl)
+### Reply to an existing conversation
 
 ```bash
-# 1) submit
-JOB_ID=$(curl -sS -H 'Content-Type: application/json'   -d '{
-    "user_input": "Write a 2-paragraph bedtime story about a shy comet.",
-    "model": "mistral",
-    "session_id": "n8n-demo-1",
-    "system_prompt": "You are a gentle storyteller; keep vocabulary simple."
-  }'   http://localhost:8000/chat/api/submit | jq -r '.job_id')
+curl -sS -X POST http://localhost:8000/api/conversations/abc123/reply \
+  -H "Authorization: Bearer $TOK" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"mistral","content":"Make it rhyme.","system_prompt":""}'
+```
 
-# 2) poll
-while :; do
-  STATUS=$(curl -sS http://localhost:8000/chat/api/jobs/$JOB_ID | jq -r '.status')
-  if [[ "$STATUS" == "done" || "$STATUS" == "error" ]]; then break; fi
-  sleep 2
-done
+### Poll for latest status
 
-curl -sS http://localhost:8000/chat/api/jobs/$JOB_ID | jq -r '.result'
+```bash
+curl -sS http://localhost:8000/api/conversations/abc123/latest \
+  -H "Authorization: Bearer $TOK"
+```
+
+### Fetch job by id
+
+```bash
+curl -sS http://localhost:8000/api/jobs/42 \
+  -H "Authorization: Bearer $TOK"
 ```
 
 ---
 
-## Example: n8n (HTTP nodes)
+## n8n Setup (HTTP Request node)
 
-Minimal workflow idea:
+* **Method/URL:** `POST http://<host>:8000/api/jobs`
+* **Headers:**
 
-1. **HTTP Request** (POST) → `http://HOST:8000/chat/api/submit`  
-   - JSON:
-     ```json
-     {
-       "user_input": "Write a short bedtime story about a curious otter.",
-       "model": "mistral",
-       "session_id": "story-{{$json.conversationId}}",
-       "system_prompt": "You are a gentle storyteller…"
-     }
-     ```
-   - Response → `{{$json.job_id}}`
+  * `Authorization: Bearer {{$env.N8N_API_TOKEN}}`
+  * `Content-Type: application/json`
+* **Body (JSON):**
 
-2. **Wait** (Fixed 2–3s) or **Loop**
+```json
+{
+  "model": "mistral",
+  "content": "Summarize: {{$json.text}}",
+  "conversation_id": "{{$json.session_id}}",
+  "system_prompt": ""
+}
+```
 
-3. **HTTP Request** (GET) → `http://HOST:8000/chat/api/jobs/{{$json.job_id}}`  
-   - IF `status != done`, loop back to Wait  
-   - IF `status == done`, pass `{{$json.result}}` to the next node (e.g., your Kokoro TTS step)
+* **Polling:** Use another HTTP Request node to `GET /api/conversations/{{$json.conversation_id}}/latest` and check `last_job.status == "done"` before reading `last_assistant.content`.
 
-> Tip: if you don’t need strict job tracking, you can skip the job poll and call `GET /chat/api/status/{{conversation_id}}` until it returns non‑null.
+> Tip: Store the `conversation_id` and `job_id` in your DB (or n8n execution data) for correlation.
 
 ---
 
-## Web UI
+## Running Behind Nginx (optional)
 
-- `/chat/login` (UI only): requires `ADMIN_PASSWORD_HASH` to be set.
-- `/chat/conversations` & `/chat/conversations/{id}`: manage conversations, send prompts from the browser.
-- `/chat/jobs`: inspect queued/processing/done jobs.
+Minimal reverse proxy example:
+
+```nginx
+location /chat/ {
+    proxy_pass http://127.0.0.1:8000/chat/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Ensure the FastAPI app is created with the matching `root_path="/chat"` (already set in `main.py`).
 
 ---
 
-## Project layout
+## Troubleshooting
+
+* **401 Unauthorized in the web UI**: Make sure routes use `require_api_auth` (not strict token). Ensure your session is active and `SECRET_KEY` is set.
+* **401 from curl/n8n**: Missing or wrong token. Send `Authorization: Bearer <N8N_API_TOKEN>`.
+* **RuntimeError: N8N\_API\_TOKEN is not set**: Add `N8N_API_TOKEN` to `.env` and restart.
+* **Login always fails**: `ADMIN_PASSWORD_HASH` wrong or unset. Regenerate the bcrypt hash.
+* **UI paths look odd**: Verify Nginx `location /chat/` and FastAPI `root_path="/chat"` align.
+* **Undefined conversation in logs**: Your frontend must pass a real `conversation_id` (the UI templates already include it in links/buttons). The new auth logic also prevents early 401s that previously caused `undefined`.
+
+---
+
+## Project Structure (high level)
 
 ```
 .
-├── main.py                 # FastAPI app & API routes
-├── queue_worker.py         # async job worker (multiprocessing)
-├── model_runner.py         # llama.cpp wrapper + model cache
-├── memory.py               # SQLite tables & helpers
-├── templates/              # Jinja2 templates (UI)
-├── run.sh                  # start API/UI
-├── run_worker.sh           # start worker(s)
-└── requirements.txt
+├── main.py                 # Routes (UI + API)
+├── auth_utils.py           # Session + token guards
+├── memory.py               # DB access: conversations, messages, jobs, queue
+├── templates/              # Jinja2 templates
+├── static/                 # (optional) static assets
+├── requirements.txt
+└── .env
 ```
 
 ---
 
-## Operational notes
+## Changelog
 
-- **Base path**: The app uses `root_path="/chat"`. If you reverse-proxy (nginx/Caddy), forward that base path or set another one.
-- **Workers**: edit `NUM_WORKERS` in `queue_worker.py` to scale CPU use; set `n_threads` in `model_runner.get_model()` accordingly.
-- **SQLite**: for more concurrency, enable WAL mode or move to Postgres (you’d swap the small `memory.py` layer).
+* **2025-08-11**: Added `require_api_auth` (session **or** token) and consolidated enqueue logic.
 
 ---
 
@@ -266,4 +254,8 @@ Minimal workflow idea:
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT (or your preferred license).
+
+
+
+
