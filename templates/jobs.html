@@ -90,11 +90,7 @@ async function viewJob(jobId){
       <button class="text-sm underline" onclick="loadJobs()">Back to list</button>
     </div>
     <div class="text-xs text-gray-400">Model: ${job.model}</div>
-    <div class="mt-4 space-y-2 max-h-80 overflow-y-auto bg-gray-900 p-3 rounded">
-      ${thread.map(m => `
-        <div><span class="text-gray-400">${m.role}</span>: ${m.content}</div>
-      `).join('')}
-    </div>
+    <div id="thread-list" class="mt-4 space-y-2 max-h-80 overflow-y-auto bg-gray-900 p-3 rounded"></div>
 
     <form class="mt-4 space-y-2" onsubmit="return replyJob(event, '${job.conversation_id}', '${job.id}')">
       <textarea id="reply-text-${job.id}" class="bg-gray-700 p-2 rounded w-full" rows="3" placeholder="Reply..."></textarea>
@@ -106,6 +102,26 @@ async function viewJob(jobId){
       </div>
     </form>
   `;
+  const list = document.getElementById('thread-list');
+  list.innerHTML = '';
+  thread.forEach(m => {
+    const row = document.createElement('div');
+
+    const role = document.createElement('span');
+    role.className = 'text-gray-400';
+    role.textContent = m.role;
+
+    const sep = document.createTextNode(': ');
+
+    const pre = document.createElement('pre');
+    pre.className = 'mono prewrap';
+    pre.textContent = m.content || '';   // <-- shows literal <speak>…</speak>
+
+    row.appendChild(role);
+    row.appendChild(sep);
+    row.appendChild(pre);
+    list.appendChild(row);
+  });
 }
 
 function modelOptionsHTML(jobModel) {
