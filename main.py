@@ -67,12 +67,6 @@ templates.env.globals["SYSTEM_PRESETS"] = SYSTEM_PRESETS
 # --------------------------------------------------------------------
 # Models
 # --------------------------------------------------------------------
-class ChatRequest(BaseModel):
-    user_input: str
-    model: str = "mistral"
-    session_id: Optional[str] = None
-    system_prompt: str = ""
-
 class CreateJobRequest(BaseModel):
     model: str
     content: str
