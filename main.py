@@ -282,32 +282,6 @@ async def create_job(payload: dict = Body(...)):
         "model": model,
     }
 
-@app.post("/api/submit")
-async def submit_chat(data: ChatRequest):
-    # Derive a friendly title from the first prompt/system text
-    title_seed = (data.user_input or data.system_prompt or "New Conversation")[:60]
-
-    # If client did not pass a session_id, create one; otherwise ensure it exists
-    if data.session_id and data.session_id.strip():
-        conversation_id = ensure_conversation(data.session_id.strip(), title=title_seed)
-        created_new = False
-    else:
-        conversation_id = create_conversation(title=title_seed)
-        created_new = True
-
-    # Optional: persist the system prompt for this conversation
-    if data.system_prompt:
-        add_message(conversation_id, "system", data.system_prompt)
-
-    # Record the user message
-    add_message(conversation_id, "user", data.user_input)
-
-    # Queue the job
-    job_id = queue_prompt(conversation_id, data.user_input, data.model, data.system_prompt)
-
-    # Return the job id AND the conversation id so the client can continue the thread later
-    return JSONResponse({"job_id": job_id, "conversation_id": conversation_id, "created_new": created_new})
-
 # ====================================================================
 # POST (UI - Session login)
 # ====================================================================
