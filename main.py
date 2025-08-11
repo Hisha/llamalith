@@ -3,7 +3,7 @@ load_dotenv()
 
 import os
 import sqlite3
-from fastapi import FastAPI, Form, Request, Query, HTTPException, Body
+from fastapi import FastAPI, Form, Request, Query, HTTPException, Body, Depends, APIRouter
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 import uvicorn
-from auth_utils import verify_password, require_login
+from auth_utils import verify_password, require_login, require_bearer_token
 from memory import add_message, queue_prompt, get_db_connection, get_conversation_messages, list_conversations, ensure_conversation, create_conversation, list_jobs, get_job, last_model_for_conversation, last_system_for_conversation
 
 app = FastAPI(root_path="/chat")
@@ -98,12 +98,12 @@ async def chat_ui(request: Request):
     })
 
 # Get the full conversation thread for a given conversation_id
-@app.get("/api/conversations/{conversation_id}/messages")
+@app.get("/api/conversations/{conversation_id}/messages", dependencies=[Depends(require_bearer_token)])
 async def get_conversation(conversation_id: str):
     return {"messages": get_conversation_messages(conversation_id)}
 
 # List recent jobs (optionally by status)
-@app.get("/api/jobs")
+@app.get("/api/jobs", dependencies=[Depends(require_bearer_token)])
 async def list_jobs_api(status: Optional[str] = None,
                         conversation_id: Optional[str] = None,
                         limit: int = 100):
@@ -111,14 +111,14 @@ async def list_jobs_api(status: Optional[str] = None,
     return {"jobs": jobs}
 
 # Get job details (status + result)
-@app.get("/api/jobs/{job_id}")
+@app.get("/api/jobs/{job_id}", dependencies=[Depends(require_bearer_token)])
 async def get_job_api(job_id: int):
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
-@app.get("/api/status/{conversation_id}")
+@app.get("/api/status/{conversation_id}", dependencies=[Depends(require_bearer_token)])
 async def check_status(conversation_id: str):
     conn = get_db_connection()
     c = conn.cursor()
@@ -203,13 +203,13 @@ async def logout(request: Request):
 #                                   POST                                            #
 #####################################################################################
 
-@app.post("/api/conversations/{conversation_id}/reply")
+@app.post("/api/conversations/{conversation_id}/reply", dependencies=[Depends(require_bearer_token)])
 async def reply_conversation(conversation_id: str, body: ReplyRequest):
     add_message(conversation_id, "user", body.content)  # ← remove model=...
     job_id = queue_prompt(conversation_id, body.content, body.model, body.system_prompt)
     return {"job_id": job_id}
 
-@app.post("/api/jobs")
+@app.post("/api/jobs", dependencies=[Depends(require_bearer_token)])
 async def create_job(payload: dict = Body(...)):
     content = (payload.get("content") or "").strip()
     model = (payload.get("model") or "mistral").strip()
@@ -244,7 +244,7 @@ async def create_job(payload: dict = Body(...)):
         "model": model,
     }
 
-@app.post("/api/submit")
+@app.post("/api/submit", dependencies=[Depends(require_bearer_token)])
 async def submit_chat(data: ChatRequest):
     conversation_id = data.session_id
     # ... keep your de-dupe query ...
