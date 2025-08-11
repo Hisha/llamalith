@@ -108,14 +108,14 @@ async function viewJob(jobId){
     const row = document.createElement('div');
 
     const role = document.createElement('span');
-    role.className = 'text-gray-400';
+    role.className = 'font-mono px-2 py-0.5 rounded ' + (m.role === 'user' ? 'bg-green-700' : 'bg-yellow-700');
     role.textContent = m.role;
 
-    const sep = document.createTextNode(': ');
+    const sep = document.createTextNode(' '); // small gap
 
     const pre = document.createElement('pre');
-    pre.className = 'mono prewrap';
-    pre.textContent = m.content || '';   // <-- shows literal <speak>…</speak>
+    pre.className = 'mono prewrap inline';
+    pre.textContent = m.content || '';
 
     row.appendChild(role);
     row.appendChild(sep);
