@@ -81,9 +81,6 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         mirostat_mode=int(os.getenv("LLM_MIROS", "0")),   # 0/1/2
         mirostat_tau=float(os.getenv("LLM_MIROS_TAU", "5.0")),
         mirostat_eta=float(os.getenv("LLM_MIROS_ETA", "0.1")),
-        # stops mainly matter if someone uses a plain prompt format;
-        # for chat format they’re usually ignored by llama.cpp
-        stop=["</s>", "\nUser:", "\nuser:", "\n###", "\nAssistant:"],
         max_tokens=remaining,   # elastic; not a hard UX cap
     )
 
