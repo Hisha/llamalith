@@ -36,7 +36,7 @@ def get_model(model_key: str) -> Llama:
     if model_key in _LOADED:
         return _LOADED[model_key]
     path = MODEL_PATHS.get(model_key)
-    model_format =  = os.getenv("LLM_CHAT_FORMAT") or MODEL_FORMATS.get(model_key) or "llama-2"
+    model_format = os.getenv("LLM_CHAT_FORMAT") or MODEL_FORMATS.get(model_key) or "llama-2"
     if not path or not os.path.exists(path):
         raise ValueError(f"Model '{model_key}' not found or path does not exist: {path!r}")
     llm = Llama(
