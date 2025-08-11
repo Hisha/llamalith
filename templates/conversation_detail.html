@@ -13,7 +13,7 @@
       {% for m in messages %}
         <div class="text-sm">
           <span class="font-mono px-2 py-0.5 rounded {{ 'bg-green-700' if m.role=='user' else 'bg-yellow-700' }}">{{ m.role }}</span>
-          <span class="ml-2">{{ m.content }}</span>
+          <pre class="mono prewrap ml-2">{{ m.content }}</pre>
         </div>
       {% endfor %}
       {% if not messages %}
