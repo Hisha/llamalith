@@ -11,11 +11,16 @@ if os.path.exists(CONFIG_PATH):
     with open(CONFIG_PATH, "r") as f:
         config = json.load(f)
         MODEL_PATHS = config.get("model_paths", {})
+        MODEL_FORMATS = config.get("model_formats", {})
 else:
     MODEL_PATHS = {
         "mistral": os.getenv("MISTRAL_PATH", "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"),
         "mythomax": os.getenv("MYTHOMAX_PATH", "models/mythomax-l2-13b.Q4_K_M.gguf"),
     }
+    MODEL_FORMATS ={
+        "mistral": "chatml",
+        "mythomax": "mistral-instruct",
+    }    
 
 # ---------- model cache ----------
 _LOADED: Dict[str, Llama] = {}
@@ -25,10 +30,12 @@ def get_model(model_key: str) -> Llama:
     if model_key in _LOADED:
         return _LOADED[model_key]
     path = MODEL_PATHS.get(model_key)
+    format = MODEL_FORMATS.get(model_key)
     if not path or not os.path.exists(path):
         raise ValueError(f"Model '{model_key}' not found or path does not exist: {path!r}")
     llm = Llama(
         model_path=path,
+        chat_format=format,
         n_ctx=4096,                     # you can raise this if you build with larger context
         n_threads=os.cpu_count() or 8,  # use all cores
         n_batch=512,
