@@ -2,7 +2,6 @@ import os
 import bcrypt
 import secrets
 from typing import Optional
-from starlette.middleware.sessions import SessionMiddleware
 from fastapi import Request, HTTPException, status, Header
 
 ADMIN_HASH = os.getenv("ADMIN_PASSWORD_HASH")
@@ -33,6 +32,34 @@ async def require_bearer_token(
       - Authorization: Bearer <token>
       - X-API-Token: <token>
     """
+    candidate: Optional[str] = None
+
+    if authorization:
+        parts = authorization.split(" ", 1)
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            candidate = parts[1].strip()
+
+    if not candidate and x_api_token:
+        candidate = x_api_token.strip()
+
+    if not (candidate and secrets.compare_digest(candidate, _API_TOKEN)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+# EITHER a logged-in session OR a valid API token
+async def require_api_auth(
+    request: Request,
+    authorization: Optional[str] = Header(default=None),
+    x_api_token: Optional[str] = Header(default=None),
+) -> None:
+    # 1) Allow site users who are logged in via session
+    if is_authenticated(request):
+        return
+
+    # 2) Otherwise require a bearer token (or X-API-Token)
     candidate: Optional[str] = None
 
     if authorization:
