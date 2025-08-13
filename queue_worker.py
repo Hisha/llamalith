@@ -2,6 +2,7 @@
 import multiprocessing
 import time
 import sys
+import re
 import logging, os, traceback
 
 from memory import (
@@ -21,6 +22,34 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 
+# ---- SSML helpers / knobs ----
+TARGET_MIN_WORDS = int(os.getenv("STORY_MIN_WORDS", "700"))
+MAX_CONTINUES    = int(os.getenv("STORY_MAX_CONTINUES", "2"))
+
+SSML_SPEAK_RE = re.compile(r"<\s*/?\s*speak\s*>", re.I)
+
+def strip_ssml_tags(s: str) -> str:
+    # remove <speak>, </speak>, and any other tags like <break .../>
+    no_speak = SSML_SPEAK_RE.sub("", s or "")
+    return re.sub(r"<[^>]+>", " ", no_speak).strip()
+
+def word_count(s: str) -> int:
+    return len(re.findall(r"\b\w+\b", s or ""))
+
+def extract_inner_ssml(s: str) -> str:
+    m = re.search(r"<\s*speak\s*>(.*)</\s*speak\s*>", s or "", flags=re.S | re.I)
+    return (m.group(1) if m else (s or "")).strip()
+
+def wrap_speak(inner: str) -> str:
+    inner = (inner or "").strip()
+    return inner if inner.lower().startswith("<speak>") else f"<speak>\n{inner}\n</speak>"
+
+def is_probably_ssml(system_prompt: str, text: str) -> bool:
+    sp = (system_prompt or "").lower()
+    t  = (text or "").lower()
+    return ("ssml" in sp) or ("<speak" in t and "</speak" in t)
+
+# ---- main worker ----
 def worker_loop(worker_id: int):
     print(f"🚀 Worker {worker_id} started.", flush=True)
     while True:
@@ -38,28 +67,62 @@ def worker_loop(worker_id: int):
 
             logging.info(f"claimed job={jid} model={model_key} convo={convo_id} ulen={len(user_input)}")
 
-            # Build history
+            # Build history from DB
             history = get_conversation_messages(convo_id) or []
 
-            # Ensure current user turn is present for this run
+            # Ensure current user turn is present
             if user_input and (not history or history[-1].get("role") != "user" or history[-1].get("content","").strip() != user_input):
                 history.append({"role": "user", "content": user_input})
 
-            # Ensure system prompt at the top (avoid dup)
+            # Ensure system prompt at top (avoid dup)
             if system_prompt and (not history or history[0].get("role") != "system" or history[0].get("content","").strip() != system_prompt):
                 history.insert(0, {"role": "system", "content": system_prompt})
 
             logging.info(f"history_turns={len(history)}; calling model…")
-            reply = run_model(model_key, history)
-            reply = (reply or "").strip()
+            reply = (run_model(model_key, history) or "").strip()
             logging.info(f"reply_len={len(reply)}")
 
-            # Guardrail: don't save blanks silently
             if not reply:
                 mark_job_done(jid, failed=True, result_text="Empty model output")
                 logging.warning(f"empty output -> marked job {jid} failed")
                 continue
 
+            # ---- SSML length guard (ONLY if this looks like SSML) ----
+            if is_probably_ssml(system_prompt, reply):
+                inner = extract_inner_ssml(reply)
+                wc = word_count(strip_ssml_tags(inner))
+                continues_left = MAX_CONTINUES
+
+                # Build a local history that includes the assistant reply so far
+                local_history = list(history)
+                local_history.append({"role": "assistant", "content": wrap_speak(inner)})
+
+                while wc < TARGET_MIN_WORDS and continues_left > 0:
+                    need = TARGET_MIN_WORDS - wc
+                    # Ask the model to continue the SAME story, no new <speak> wrapper
+                    cont_prompt = (
+                        "Continue the SAME bedtime story in the same tone and setting. "
+                        f"Add new paragraphs to reach at least {TARGET_MIN_WORDS} words total. "
+                        "Do NOT repeat earlier lines. Output ONLY the continuation content "
+                        "without starting with <speak> or ending with </speak>. "
+                        "Keep <break time=\"1.2s\"/> between paragraphs and occasional "
+                        "<break time=\"400ms\"/> between sentences."
+                    )
+                    local_history.append({"role": "user", "content": cont_prompt})
+                    cont = (run_model(model_key, local_history) or "").strip()
+                    cont_inner = extract_inner_ssml(cont)
+
+                    # Stitch with a paragraph break
+                    inner = inner.rstrip() + '\n<break time="1.2s"/>\n' + cont_inner.lstrip()
+                    wc = word_count(strip_ssml_tags(inner))
+                    # Replace last assistant in local history with the updated stitched version
+                    local_history[-2] = {"role": "assistant", "content": wrap_speak(inner)}
+                    continues_left -= 1
+
+                reply = wrap_speak(inner)
+                logging.info(f"final_word_count={wc}")
+
+            # Save final result (SSML stitched or original)
             save_assistant_message(convo_id, reply)
             mark_job_done(jid, failed=False, result_text=reply)
             logging.info(f"✅ Finished job {jid}")
