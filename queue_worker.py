@@ -5,6 +5,17 @@ import sys
 import re
 import logging, os, traceback
 
+CONFIG_PATH = os.getenv("LLAMALITH_CONFIG", "config.json")
+_story_cfg = {}
+if os.path.exists(CONFIG_PATH):
+    try:
+        import json
+        with open(CONFIG_PATH, "r") as _f:
+            _cfg = json.load(_f) or {}
+            _story_cfg = (_cfg.get("story_settings") or {})
+    except Exception:
+        _story_cfg = {}
+
 from memory import (
     claim_next_job,
     get_conversation_messages,
@@ -23,8 +34,8 @@ logging.basicConfig(
 )
 
 # ---- SSML helpers / knobs ----
-TARGET_MIN_WORDS = int(os.getenv("STORY_MIN_WORDS", "700"))
-MAX_CONTINUES    = int(os.getenv("STORY_MAX_CONTINUES", "2"))
+TARGET_MIN_WORDS = int(os.getenv("STORY_MIN_WORDS", str(_story_cfg.get("min_words", 700))))
+MAX_CONTINUES    = int(os.getenv("STORY_MAX_CONTINUES", str(_story_cfg.get("max_continues", 2))))
 
 SSML_SPEAK_RE = re.compile(r"<\s*/?\s*speak\s*>", re.I)
 
