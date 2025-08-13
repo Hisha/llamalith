@@ -38,7 +38,18 @@ TARGET_MIN_WORDS = int(os.getenv("STORY_MIN_WORDS", str(_story_cfg.get("min_word
 MAX_CONTINUES    = int(os.getenv("STORY_MAX_CONTINUES", str(_story_cfg.get("max_continues", 2))))
 
 SSML_SPEAK_RE = re.compile(r"<\s*/?\s*speak\s*>", re.I)
+SPEAK_OPEN_RE  = re.compile(r"<\s*speak\s*>", re.I)
+SPEAK_CLOSE_RE = re.compile(r"</\s*speak\s*>", re.I)
 
+def normalize_speak_once(text: str) -> str:
+    """Remove any stray <speak> / </speak> anywhere, then wrap once."""
+    if not text:
+        return "<speak></speak>"
+    body = SPEAK_OPEN_RE.sub("", text)
+    body = SPEAK_CLOSE_RE.sub("", body)
+    body = body.strip()
+    return f"<speak>\n{body}\n</speak>"
+    
 def strip_ssml_tags(s: str) -> str:
     # remove <speak>, </speak>, and any other tags like <break .../>
     no_speak = SSML_SPEAK_RE.sub("", s or "")
@@ -130,7 +141,7 @@ def worker_loop(worker_id: int):
                     local_history[-2] = {"role": "assistant", "content": wrap_speak(inner)}
                     continues_left -= 1
 
-                reply = wrap_speak(inner)
+                reply = normalize_speak_once(inner)
                 logging.info(f"final_word_count={wc}")
 
             # Save final result (SSML stitched or original)
