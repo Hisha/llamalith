@@ -36,7 +36,7 @@ templates = Jinja2Templates(directory="templates")
 templates.env.globals["root_path"] = "/chat/"
 
 AVAILABLE_MODELS = [
-    m.strip() for m in os.getenv("LLM_MODELS", "mistral,mixtral,mythomax").split(",") if m.strip()
+    m.strip() for m in os.getenv("LLM_MODELS", "mistral,mythomax,openchat").split(",") if m.strip()
 ]
 templates.env.globals["AVAILABLE_MODELS"] = AVAILABLE_MODELS
 
