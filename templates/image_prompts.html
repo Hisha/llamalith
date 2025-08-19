@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-2xl font-bold mb-6">🎯 Generate Image Prompts</h2>
+
+<form method="post" class="space-y-4 bg-gray-800 p-6 rounded shadow-md max-w-2xl mx-auto">
+  <div>
+    <label for="subject" class="block text-sm mb-1">Prompt Subject</label>
+    <input type="text" name="subject" id="subject" required
+           placeholder="e.g., Women on a tropical beach at sunset"
+           class="w-full p-2 rounded bg-gray-900 border border-gray-600">
+  </div>
+
+  <div class="flex items-center gap-3">
+    <input type="checkbox" id="multi" name="multi" value="1" class="accent-indigo-600">
+    <label for="multi" class="text-sm">Generate multiple prompts</label>
+
+    <input type="number" name="count" min="2" max="10" value="5"
+           class="w-16 p-1 bg-gray-900 border border-gray-600 rounded text-center text-sm"
+           placeholder="5">
+  </div>
+
+  <div class="flex items-center gap-3">
+    <input type="checkbox" id="title_desc" name="title_desc" value="1" class="accent-indigo-600">
+    <label for="title_desc" class="text-sm">Also generate a title and description for social media</label>
+  </div>
+
+  <input type="hidden" name="model" value="openchat">
+  <input type="hidden" name="system_prompt" value="{{ SYSTEM_PRESETS[0].text }}">
+
+  <div class="flex gap-4 mt-6">
+    <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded font-bold">
+      Submit Prompt Job
+    </button>
+    <a href="{{ request.scope.root_path }}/jobs" class="px-4 py-2 rounded border border-gray-600">Cancel</a>
+  </div>
+</form>
+{% endblock %}
