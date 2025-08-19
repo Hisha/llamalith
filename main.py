@@ -321,7 +321,7 @@ async def submit_image_prompt(
     model: str = Form("openchat"),
     system_prompt: str = Form(...),
     multi: Optional[str] = Form(None),
-    count: Optional[int] = Form(5),
+    count: Optional[int] = Form(None),
     title_desc: Optional[str] = Form(None),
 ):
     require_login(request)
@@ -329,18 +329,20 @@ async def submit_image_prompt(
     if not subject.strip():
         raise HTTPException(status_code=400, detail="Subject is required.")
 
-    # Build user prompt from form
-    n = int(count or 1)
+    # If "multi" is checked, use count or default to 5
+    if multi:
+        n = count or 5
+    else:
+        n = 1
+
     prompt = f"Generate {n} photo-realistic Flux image prompt{'s' if n > 1 else ''} about: \"{subject.strip()}\".\n\n"
     prompt += "Each should start with 'Photo of...'.\n"
     if title_desc:
         prompt += "Also generate a suitable social media title and description to group the images together for a TikTok or Instagram post."
 
-    # Queue the job
     convo_id = create_conversation(title=f"Image: {subject[:30]}")
     enqueue_user_message(convo_id, prompt.strip(), model, system_prompt.strip())
 
-    # Redirect to jobs
     return RedirectResponse(url="/chat/jobs", status_code=303)
 
 # ====================================================================
