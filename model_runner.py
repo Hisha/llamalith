@@ -19,11 +19,13 @@ if os.path.exists(CONFIG_PATH):
     MODEL_SETTINGS = cfg.get("model_settings", {}) or {}
 else:
     MODEL_PATHS = {
-        "mistral":  os.getenv("MISTRAL_PATH",  "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"),
-        "mythomax": os.getenv("MYTHOMAX_PATH", "models/mythomax-l2-13b.Q4_K_M.gguf"),
+        "mistral":  os.getenv("MISTRAL_PATH",  "models/mistral/mistral-7b-instruct-v0.2.Q4_K_M.gguf"),
+        "mixtral": os.getenv("MIXTRAL_PATH", "models/mixtral/mixtral-8x7b-instruct-v0.1.Q4_K_M.gguf"),
+        "mythomax": os.getenv("MYTHOMAX_PATH", "models/mythomax/mythomax-l2-13b.Q4_K_M.gguf"),
     }
     MODEL_FORMATS = {
         "mistral":  "mistral-instruct",
+        "mixtral":  "mistral-instruct",
         "mythomax": "chatml",
     }
 
