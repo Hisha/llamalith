@@ -177,6 +177,11 @@ async def conversation_detail(request: Request, conversation_id: str):
         },
     )
 
+@app.get("/image-prompts", response_class=HTMLResponse)
+async def image_prompts_page(request: Request):
+    require_login(request)
+    return templates.TemplateResponse("image_prompts.html", {"request": request, "now": datetime.now})
+
 @app.get("/jobs", response_class=HTMLResponse)
 async def jobs_ui(request: Request):
     require_login(request)
@@ -309,6 +314,35 @@ async def create_job(payload: dict = Body(...)):
         "created_new": created_new,
         "model": model,
     }
+
+@app.post("/image-prompts")
+async def submit_image_prompt(
+    request: Request,
+    subject: str = Form(...),
+    model: str = Form("openchat"),
+    system_prompt: str = Form(...),
+    multi: Optional[str] = Form(None),
+    count: Optional[int] = Form(5),
+    title_desc: Optional[str] = Form(None),
+):
+    require_login(request)
+
+    if not subject.strip():
+        raise HTTPException(status_code=400, detail="Subject is required.")
+
+    # Build user prompt from form
+    n = int(count or 1)
+    prompt = f"Generate {n} photo-realistic Flux image prompt{'s' if n > 1 else ''} about: \"{subject.strip()}\".\n\n"
+    prompt += "Each should start with 'Photo of...'.\n"
+    if title_desc:
+        prompt += "Also generate a suitable social media title and description to group the images together for a TikTok or Instagram post."
+
+    # Queue the job
+    convo_id = create_conversation(title=f"Image: {subject[:30]}")
+    enqueue_user_message(convo_id, prompt.strip(), model, system_prompt.strip())
+
+    # Redirect to jobs
+    return RedirectResponse(url="/chat/jobs", status_code=303)
 
 # ====================================================================
 # POST (UI - Session login)
