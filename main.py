@@ -49,8 +49,7 @@ SYSTEM_PRESETS = [
             "- Begin with “Photo of…”\n"
             "- Are under 256 tokens long\n"
             "- Emphasize ultra high quality, hyper-realism, and 8K photorealistic detail\n"
-            "- Describe physical characteristics, clothing, body language, environment, lighting, and emotional tone\n"
-            "- Use camera terms like f-stop, lens type, lighting style, focus depth, etc.\n\n"
+            "- Describe physical characteristics, clothing, body language, environment, lighting, and emotional tone\n\n"
             "Avoid vague words or abstract terms. Every word should add visual clarity."
         ),
     },
