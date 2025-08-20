@@ -339,11 +339,12 @@ async def submit_image_prompt(
     prompt += "Each should start with 'Photo of...'.\n"
     if title_desc:
         prompt += (
-            "\n\nAfter the image prompts, generate a single social media title and a single description "
+            "\n\nAfter the image prompts, generate a single social media title, a single description and two hashtags "
             "to group all the images together in a TikTok/Instagram post.\n"
             "Format it like this at the end:\n\n"
             "Social Media Title: <title>\n"
-            "Group Description: <description>"
+            "Group Description: <description>\n"
+            "Hashtags: #fbn #ai #aiart <hashtags>"
         )
 
     convo_id = create_conversation(title=f"Image: {subject[:30]}")
