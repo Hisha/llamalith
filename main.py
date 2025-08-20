@@ -338,7 +338,13 @@ async def submit_image_prompt(
     prompt = f"Generate {n} photo-realistic Flux image prompt{'s' if n > 1 else ''} about: \"{subject.strip()}\".\n\n"
     prompt += "Each should start with 'Photo of...'.\n"
     if title_desc:
-        prompt += "Also generate a suitable social media title and description to group the images together for a TikTok or Instagram post."
+        prompt += (
+            "\n\nAfter the image prompts, generate a single social media title and a single description "
+            "to group all the images together in a TikTok/Instagram post.\n"
+            "Format it like this at the end:\n\n"
+            "Social Media Title: <title>\n"
+            "Group Description: <description>"
+        )
 
     convo_id = create_conversation(title=f"Image: {subject[:30]}")
     enqueue_user_message(convo_id, prompt.strip(), model, system_prompt.strip())
