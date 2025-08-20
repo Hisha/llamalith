@@ -337,10 +337,9 @@ async def submit_image_prompt(
 
     prompt = f"Generate {n} photo-realistic Flux image prompt{'s' if n > 1 else ''} about: \"{subject.strip()}\".\n\n"
     prompt += "Each should start with 'Photo of...'.\n"
-    prompt += "Each should end with 'Ultra high-quality, hyper-realism, and 8K'.\n"
     if title_desc:
         prompt += (
-            "\n\nAfter the image prompts, generate a single social media title, a single description and add two hashtags to the existing list "
+            "\n\nAfter the image prompts, generate a single social media title, a single description and two hashtags "
             "to group all the images together in a TikTok/Instagram post.\n"
             "Format it like this at the end:\n\n"
             "Social Media Title: <title>\n"
