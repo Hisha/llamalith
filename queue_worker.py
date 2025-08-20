@@ -7,14 +7,18 @@ import logging, os, traceback
 
 CONFIG_PATH = os.getenv("LLAMALITH_CONFIG", "config.json")
 _story_cfg = {}
+_worker_count = 2  # fallback default
+
 if os.path.exists(CONFIG_PATH):
     try:
         import json
         with open(CONFIG_PATH, "r") as _f:
             _cfg = json.load(_f) or {}
             _story_cfg = (_cfg.get("story_settings") or {})
+            _worker_count = int(_cfg.get("worker_settings", {}).get("worker_count", 2))
     except Exception:
         _story_cfg = {}
+        _worker_count = 2
 
 from memory import (
     claim_next_job,
@@ -25,7 +29,7 @@ from memory import (
 from model_runner import run_model
 
 POLL_SEC = 1
-NUM_WORKERS = 2
+NUM_WORKERS = _worker_count
 
 logging.basicConfig(
     level=logging.INFO,
