@@ -32,27 +32,35 @@ else:
 def _rope_kwargs(s: dict) -> dict:
     """
     Build rope-related kwargs for llama_cpp.Llama from config "rope_scaling".
-    Compatible with recent llama-cpp-python builds.
+    For llama-cpp-python 0.3.15, rope_scaling_type expects an *int* enum:
+      0 = none, 1 = linear, 2 = yarn
     """
     out = {}
     rope = (s or {}).get("rope_scaling")
     if not rope:
         return out
 
-    rtype = str(rope.get("type", "none")).lower()
+    # Map string -> enum int expected by your wheel
+    type_map = {"none": 0, "linear": 1, "yarn": 2}
+    rtype_str = str(rope.get("type", "none")).lower()
+    rtype_enum = type_map.get(rtype_str, 0)  # default to none
+
+    # scale factor (e.g., 2.0 to go 4k->8k)
     factor = float(rope.get("factor", 1.0))
 
-    # Generic knobs
-    # In llama-cpp-python: rope_freq_scale is the scale multiplier
-    # rope_scaling_type can be "linear" or "yarn" (or None)
-    if rtype in ("linear", "yarn"):
-        out["rope_scaling_type"] = rtype
+    # Required / common knobs
+    if rtype_enum > 0:
+        out["rope_scaling_type"] = rtype_enum
         out["rope_freq_scale"] = factor
 
-    # Optional YARN extras if provided
-    for k in ("yarn_orig_ctx", "yarn_ext_factor", "yarn_attn_factor", "yarn_beta_fast", "yarn_beta_slow"):
-        if k in rope:
-            out[k] = rope[k]
+    # YARN-specific good defaults if not provided
+    # (these keys exist in your wheel signature)
+    if rtype_enum == 2:  # yarn
+        out.setdefault("yarn_orig_ctx", int(rope.get("yarn_orig_ctx", 4096)))
+        out.setdefault("yarn_ext_factor", float(rope.get("yarn_ext_factor", -1.0)))
+        out.setdefault("yarn_attn_factor", float(rope.get("yarn_attn_factor", 1.0)))
+        out.setdefault("yarn_beta_fast", float(rope.get("yarn_beta_fast", 32.0)))
+        out.setdefault("yarn_beta_slow", float(rope.get("yarn_beta_slow", 1.0)))
 
     return out
 
