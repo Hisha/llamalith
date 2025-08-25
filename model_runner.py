@@ -29,6 +29,33 @@ else:
         "openchat": "chatml",
     }
 
+def _rope_kwargs(s: dict) -> dict:
+    """
+    Build rope-related kwargs for llama_cpp.Llama from config "rope_scaling".
+    Compatible with recent llama-cpp-python builds.
+    """
+    out = {}
+    rope = (s or {}).get("rope_scaling")
+    if not rope:
+        return out
+
+    rtype = str(rope.get("type", "none")).lower()
+    factor = float(rope.get("factor", 1.0))
+
+    # Generic knobs
+    # In llama-cpp-python: rope_freq_scale is the scale multiplier
+    # rope_scaling_type can be "linear" or "yarn" (or None)
+    if rtype in ("linear", "yarn"):
+        out["rope_scaling_type"] = rtype
+        out["rope_freq_scale"] = factor
+
+    # Optional YARN extras if provided
+    for k in ("yarn_orig_ctx", "yarn_ext_factor", "yarn_attn_factor", "yarn_beta_fast", "yarn_beta_slow"):
+        if k in rope:
+            out[k] = rope[k]
+
+    return out
+
 # ---------- model cache ----------
 _LOADED: Dict[str, Llama] = {}
 
@@ -45,24 +72,50 @@ def get_model(model_key: str) -> Llama:
         raise ValueError(f"Model '{model_key}' not found or path does not exist: {path!r}")
 
     s = _settings_for(model_key)
-    # allow per-model n_ctx; default 4096
+
+    # per-model / env overrides
     n_ctx = int(os.getenv("LLM_N_CTX", str(s.get("n_ctx", 4096))))
+    n_threads = int(os.getenv("LLM_N_THREADS", str(os.cpu_count() or 8)))
+    n_batch = int(os.getenv("LLM_N_BATCH", str(s.get("n_batch", 512))))
+    n_gpu_layers = int(os.getenv("LLM_N_GPU_LAYERS", str(s.get("n_gpu_layers", 0))))
 
     # chat_format: env overrides config, which overrides fallback
     model_format = os.getenv("LLM_CHAT_FORMAT") or MODEL_FORMATS.get(model_key) or "llama-2"
 
-    llm = Llama(
+    # gather optional RoPE scaling kwargs from config (only present for models you enable)
+    rope_kwargs = _rope_kwargs(s)
+
+    # Build common kwargs
+    base_kwargs = dict(
         model_path=path,
         chat_format=model_format,
         n_ctx=n_ctx,
-        n_threads=os.cpu_count() or 8,
-        n_batch=int(os.getenv("LLM_N_BATCH", "512")),
+        n_threads=n_threads,
+        n_batch=n_batch,
+        n_gpu_layers=n_gpu_layers,
         use_mmap=True,
         use_mlock=False,
         verbose=False,
     )
+
+    # Try with rope; if the installed llama-cpp-python is older and rejects args, retry without
+    try:
+        llm = Llama(**base_kwargs, **rope_kwargs)
+        loaded_with_rope = bool(rope_kwargs)
+    except TypeError:
+        # Fall back gracefully (old wheel)
+        llm = Llama(**base_kwargs)
+        loaded_with_rope = False
+        if rope_kwargs:
+            print(f"[llamalith] WARNING: rope kwargs unsupported by current llama-cpp-python wheel; "
+                  f"loaded without RoPE scaling for model={model_key}")
+
     _LOADED[model_key] = llm
-    print(f"[llamalith] loaded model={model_key} path={path} model_format={model_format} n_ctx={n_ctx}")
+
+    # Log a concise summary
+    rope_msg = f" rope={rope_kwargs}" if loaded_with_rope else ""
+    print(f"[llamalith] loaded model={model_key} path={path} "
+          f"format={model_format} n_ctx={n_ctx} n_batch={n_batch} n_gpu_layers={n_gpu_layers}{rope_msg}")
     return llm
 
 # ---------- prompt helpers ----------
