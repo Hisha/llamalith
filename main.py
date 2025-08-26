@@ -340,12 +340,21 @@ async def submit_image_prompt(
     prompt += "Each should end with 'Resolution: 8K Aspect Ratio: 9:16 (portrait) Rendering: Ultra-detailed, high dynamic range'.\n"
     if title_desc:
         prompt += (
-            "\n\nAfter the image prompts, generate a single social media title, a single description and two hashtags "
-            "to group all the images together in a TikTok/Instagram post.\n"
-            "Format it like this at the end:\n\n"
+            "\n\nAfter the image prompts, generate a single social media title, a single group description, and exactly two (2) short, original hashtags to group all images together in a TikTok/Instagram post.\n\n"
+            "STYLE & RULES (must follow all):\n"
+            "- Voice: punchy, cinematic, vivid; avoid bland phrasing.\n"
+            "- Be specific: include 2–3 concrete visual details (props, materials, lighting, era, environment).\n"
+            "- Hook: imply motion or drama; use active verbs.\n"
+            "- No clichés or filler like 'explore the world of…', 'step into…', 'journey through…', 'discover…'.\n"
+            "- No generic terms like 'illustrations', 'collection', 'gallery'. Use subject nouns instead (e.g., 'airship corsets', 'soot-streaked goggles').\n"
+            "- Length: Title ≤ 70 characters. Description 1–2 sentences, 22–45 words.\n"
+            "- Tone: sensational but classy (no clickbait words like “shocking”, “insane”).\n"
+            "- Hashtags: exactly two custom tags; 1–3 words each; no spaces; no repeats of #fbn #ai #aiart; avoid broad tags like #steampunk, #art, #fantasy unless uniquely combined (e.g., #ValveVelvet).\n"
+            "- Do not mention resolution, camera brands, or 'AI'.\n\n"
+            "Format it like this at the end, exactly:\n\n"
             "Social Media Title: <title>\n"
             "Group Description: <description>\n"
-            "Hashtags: #fbn #ai #aiart <hashtags>"
+            "Hashtags: #fbn #ai #aiart <hashtag1> <hashtag2>\n"
         )
 
     convo_id = create_conversation(title=f"Image: {subject[:30]}")
