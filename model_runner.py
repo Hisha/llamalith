@@ -1,5 +1,6 @@
 import os
 import json
+import logging 
 from typing import List, Dict, Any
 from llama_cpp import Llama
 
@@ -90,12 +91,15 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
 
     # Determine context + remaining space
     # n_ctx is what we initialized the model with
+    prompt_token_count = None
+    n_ctx = None
     try:
         prompt_str = format_messages(messages)
         prompt_tokens = llm.tokenize(prompt_str.encode("utf-8"))
+        prompt_token_count = len(prompt_tokens)
         # match the constructor value (we don't have a public getter)
         n_ctx = int(os.getenv("LLM_N_CTX", str(s.get("n_ctx", 4096))))
-        remaining_ctx = max(256, n_ctx - len(prompt_tokens) - SAFETY_MARGIN)
+        remaining_ctx = max(256, n_ctx - prompt_token_count - SAFETY_MARGIN)
     except Exception:
         remaining_ctx = 1024
 
@@ -116,6 +120,14 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     else:
         max_tokens_final = max(1, min(max_tokens, remaining_ctx))
 
+    # Log prompt-side usage before calling the model
+    if prompt_token_count is not None:
+        logging.info(
+            f"[tokens] model={model_key} prompt_tokens={prompt_token_count} "
+            f"n_ctx={n_ctx if n_ctx is not None else 'unknown'} "
+            f"max_gen_tokens={max_tokens_final}"
+        )
+
     response = llm.create_chat_completion(
         messages=messages,
         temperature=float(os.getenv("LLM_TEMP", str(s.get("temperature", 0.7)))),
@@ -134,4 +146,30 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     text = msg.get("content")
     if text is None:
         text = choice.get("text", "")
-    return (text or "").strip()
+    out = (text or "").strip()
+
+    # Try to get usage from llama.cpp/llama-cpp-python; otherwise approximate
+    usage = response.get("usage") or {}
+    comp_tokens = usage.get("completion_tokens")
+    prmpt_tokens_from_usage = usage.get("prompt_tokens", prompt_token_count)
+
+    if comp_tokens is None:
+        try:
+            comp_tokens = len(llm.tokenize(out.encode("utf-8")))
+        except Exception:
+            comp_tokens = -1
+
+    total_tokens = None
+    try:
+        total_tokens = (prmpt_tokens_from_usage or 0) + (comp_tokens or 0)
+    except Exception:
+        pass
+
+    logging.info(
+        f"[tokens] model={model_key} "
+        f"prompt_tokens={prmpt_tokens_from_usage if prmpt_tokens_from_usage is not None else 'unknown'} "
+        f"completion_tokens={comp_tokens if comp_tokens is not None else 'unknown'} "
+        f"total_tokens={total_tokens if total_tokens is not None else 'unknown'}"
+    )
+
+    return out
