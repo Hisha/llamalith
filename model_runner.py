@@ -86,6 +86,7 @@ def format_messages(messages: List[Dict[str, str]]) -> str:
 
 # ---------- inference ----------
 def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
+    import os, logging
     llm = get_model(model_key)
     s = _settings_for(model_key)
 
@@ -120,7 +121,6 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         "top_k": int(os.getenv("LLM_TOP_K", str(s.get("top_k", 40)))),
         "repeat_penalty": float(os.getenv("LLM_REPEAT_PENALTY", str(s.get("repeat_penalty", 1.07)))),
         "max_tokens": max_tokens_final,
-        # removed "ignore_eos": True (backend rejects this kwarg)
     }
 
     # optional typical sampling
@@ -154,11 +154,16 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         freq_val = 0.0
     params["frequency_penalty"] = freq_val
 
-    # Stop sequences: disable for prose model to avoid early cutoffs
+    # ---- Stop sequences (per-model, opt-in) ----
     stop = None
     stop_env = os.getenv("LLM_STOP")
     stop_cfg = s.get("stop")
-    if not model_key.endswith("-novelchapter"):
+
+    require_end = bool(s.get("require_end_token"))  # NEW: per-model toggle
+    if require_end:
+        stop = ["<<END>>"]  # only for models that require it
+    elif not model_key.endswith("-novelchapter"):
+        # keep your previous default behavior for all other models
         if stop_env:
             stop = [x for x in stop_env.split(",") if x]
         elif isinstance(stop_cfg, list):
@@ -167,6 +172,19 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
             stop = [stop_cfg]
     if stop:
         params["stop"] = stop
+
+    # ---- Optional EOS bias (env or per-model config; negative discourages EOS) ----
+    try:
+        eos_bias_val = os.getenv("LLM_EOS_BIAS", None)
+        if eos_bias_val is None:
+            eos_bias_val = s.get("eos_bias", None)  # allow per-model in config
+        if eos_bias_val is not None:
+            eos_bias = float(eos_bias_val)
+            lb = dict(params.get("logit_bias") or {})
+            lb[2] = eos_bias  # llama.cpp EOS token id
+            params["logit_bias"] = lb
+    except Exception:
+        pass
 
     # ---- Logging: tokens + param snapshot (no full prompts) ----
     if prompt_token_count is not None:
@@ -227,4 +245,5 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         f"total_tokens={total_tokens if total_tokens is not None else 'unknown'}"
     )
 
+    logging.info("reply_len=%d", len(out))
     return out
