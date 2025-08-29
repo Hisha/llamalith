@@ -159,11 +159,10 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     stop_env = os.getenv("LLM_STOP")
     stop_cfg = s.get("stop")
 
-    require_end = bool(s.get("require_end_token"))  # NEW: per-model toggle
+    require_end = bool(s.get("require_end_token"))  # per-model toggle
     if require_end:
         stop = ["<<END>>"]  # only for models that require it
     elif not model_key.endswith("-novelchapter"):
-        # keep your previous default behavior for all other models
         if stop_env:
             stop = [x for x in stop_env.split(",") if x]
         elif isinstance(stop_cfg, list):
@@ -174,15 +173,20 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         params["stop"] = stop
 
     # ---- Optional EOS bias (env or per-model config; negative discourages EOS) ----
+    eos_bias_report = "none"
     try:
         eos_bias_val = os.getenv("LLM_EOS_BIAS", None)
         if eos_bias_val is None:
-            eos_bias_val = s.get("eos_bias", None)  # allow per-model in config
+            eos_bias_val = s.get("eos_bias", None)  # per-model config
         if eos_bias_val is not None:
             eos_bias = float(eos_bias_val)
-            lb = dict(params.get("logit_bias") or {})
-            lb[2] = eos_bias  # llama.cpp EOS token id
-            params["logit_bias"] = lb
+
+            # pick the adapter key name (default "logit_bias"; many adapters use "logit-bias")
+            lb_key = os.getenv("LLM_LOGIT_BIAS_KEY", s.get("logit_bias_key", "logit_bias"))
+
+            # llama.cpp EOS token id is 2
+            params[lb_key] = {2: eos_bias}
+            eos_bias_report = f"{lb_key}={{2: {eos_bias}}}"
     except Exception:
         pass
 
@@ -204,6 +208,7 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
             params["max_tokens"], params.get("stop", "-"),
             len(messages), sum(msg_sizes),
         )
+        logging.info("[request] eos_bias=%s", eos_bias_report)
         roles = [m.get("role","") for m in messages]
         logging.info("[request] message_roles=%s", roles)
     except Exception as e:
@@ -244,6 +249,37 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         f"completion_tokens={comp_tokens if comp_tokens is not None else 'unknown'} "
         f"total_tokens={total_tokens if total_tokens is not None else 'unknown'}"
     )
+
+    # ---- Require-end enforcement (one-shot) ----
+    if require_end and "<<END>>" not in out:
+        logging.warning("[require_end_token] <<END>> not found; issuing one-shot continuation")
+        cont_messages = list(messages) + [
+            {"role": "assistant", "content": out},
+            {"role": "user", "content":
+                "Continue the same scene seamlessly without restarting. "
+                "When complete, end with <<END>> on its own line. Prose only."}
+        ]
+        # conservative chunk to avoid context overflow
+        try:
+            out_tok = len(llm.tokenize(out.encode("utf-8")))
+            headroom = max(128, n_ctx - (prompt_token_count or 0) - out_tok - SAFETY_MARGIN)
+        except Exception:
+            headroom = max(128, remaining_ctx // 2)
+
+        cont_params = dict(params)
+        cont_params["max_tokens"] = max(256, min(int(params.get("max_tokens", 1024) * 0.6), headroom))
+
+        cont_resp = llm.create_chat_completion(messages=cont_messages, **cont_params)
+        cont_choice = (cont_resp.get("choices") or [{}])[0]
+        cont_msg = cont_choice.get("message", {})
+        cont_text = cont_msg.get("content") or cont_choice.get("text", "") or ""
+        addition = cont_text.strip()
+        if addition:
+            out = (out + ("\n\n" if not out.endswith("\n") else "") + addition).strip()
+
+        if "<<END>>" not in out:
+            logging.warning("[require_end_token] still missing after continuation; appending <<END>>")
+            out = out.rstrip() + ("\n" if not out.endswith("\n") else "") + "<<END>>"
 
     logging.info("reply_len=%d", len(out))
     return out
