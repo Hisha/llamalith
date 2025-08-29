@@ -87,6 +87,7 @@ def format_messages(messages: List[Dict[str, str]]) -> str:
 # ---------- inference ----------
 def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     import os, logging
+
     llm = get_model(model_key)
     s = _settings_for(model_key)
 
@@ -174,21 +175,26 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
 
     # ---- Optional EOS bias (env or per-model config; negative discourages EOS) ----
     eos_bias_report = "none"
+    eos_bias_value = None
+    bias_key_used = None
     try:
         eos_bias_val = os.getenv("LLM_EOS_BIAS", None)
         if eos_bias_val is None:
             eos_bias_val = s.get("eos_bias", None)  # per-model config
         if eos_bias_val is not None:
-            eos_bias = float(eos_bias_val)
-
-            # pick the adapter key name (default "logit_bias"; many adapters use "logit-bias")
-            lb_key = os.getenv("LLM_LOGIT_BIAS_KEY", s.get("logit_bias_key", "logit_bias"))
-
-            # llama.cpp EOS token id is 2
-            params[lb_key] = {2: eos_bias}
-            eos_bias_report = f"{lb_key}={{2: {eos_bias}}}"
+            eos_bias_value = float(eos_bias_val)
     except Exception:
-        pass
+        eos_bias_value = None
+
+    # prefer configured key, then fallbacks
+    candidate_bias_keys = []
+    pref_key = os.getenv("LLM_LOGIT_BIAS_KEY", s.get("logit_bias_key", None))
+    if pref_key:
+        candidate_bias_keys.append(pref_key)
+    # common fallbacks
+    for k in ("logit_bias", "logit-bias", "logit_bias_map"):
+        if k not in candidate_bias_keys:
+            candidate_bias_keys.append(k)
 
     # ---- Logging: tokens + param snapshot (no full prompts) ----
     if prompt_token_count is not None:
@@ -208,14 +214,41 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
             params["max_tokens"], params.get("stop", "-"),
             len(messages), sum(msg_sizes),
         )
-        logging.info("[request] eos_bias=%s", eos_bias_report)
-        roles = [m.get("role","") for m in messages]
-        logging.info("[request] message_roles=%s", roles)
     except Exception as e:
         logging.warning(f"[request] failed to log param snapshot: {e}")
 
-    # ---- Call model ----
-    response = llm.create_chat_completion(messages=messages, **params)
+    # ---- Call model (with progressive fallback for EOS bias kwarg) ----
+    def _try_call(with_bias_key: str = None):
+        call_params = dict(params)
+        if with_bias_key and eos_bias_value is not None:
+            # llama.cpp EOS token id is 2
+            call_params[with_bias_key] = {2: eos_bias_value}
+        return llm.create_chat_completion(messages=messages, **call_params)
+
+    response = None
+    if eos_bias_value is not None:
+        for key in candidate_bias_keys:
+            try:
+                response = _try_call(key)
+                bias_key_used = key
+                break
+            except TypeError as te:
+                # unexpected keyword argument '<key>' -> try next
+                if f"unexpected keyword argument '{key}'" in str(te):
+                    continue
+                # other TypeError -> re-raise
+                raise
+            except Exception:
+                # other error: try next key
+                continue
+
+    if response is None:
+        # either no eos bias requested, or all keys failed -> call without bias
+        response = _try_call(None)
+        logging.info("[request] eos_bias=none (no bias or adapter ignored)")
+
+    if bias_key_used:
+        logging.info("[request] eos_bias_applied=%s={2: %s}", bias_key_used, eos_bias_value)
 
     # ---- Extract text + finish reason ----
     choice = (response.get("choices") or [{}])[0]
@@ -268,6 +301,10 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
 
         cont_params = dict(params)
         cont_params["max_tokens"] = max(256, min(int(params.get("max_tokens", 1024) * 0.6), headroom))
+
+        # continuation attempt respects whatever bias key worked the first time
+        if bias_key_used and eos_bias_value is not None:
+            cont_params[bias_key_used] = {2: eos_bias_value}
 
         cont_resp = llm.create_chat_completion(messages=cont_messages, **cont_params)
         cont_choice = (cont_resp.get("choices") or [{}])[0]
