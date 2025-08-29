@@ -155,14 +155,15 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         freq_val = 0.0
     params["frequency_penalty"] = freq_val
 
-    # ---- Stop sequences (per-model, opt-in) ----
+    # ---- end token + stop handling ----
+    end_token_str = s.get("end_token", "<<END>>")
     stop = None
     stop_env = os.getenv("LLM_STOP")
     stop_cfg = s.get("stop")
-
     require_end = bool(s.get("require_end_token"))  # per-model toggle
+
     if require_end:
-        stop = ["<<END>>"]  # only for models that require it
+        stop = [end_token_str]  # enforce literal end marker
     elif not model_key.endswith("-novelchapter"):
         if stop_env:
             stop = [x for x in stop_env.split(",") if x]
@@ -173,10 +174,8 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     if stop:
         params["stop"] = stop
 
-    # ---- Optional EOS bias (env or per-model config; negative discourages EOS) ----
-    eos_bias_report = "none"
+    # ---- EOS + END-token logit bias (adapter-key with fallbacks) ----
     eos_bias_value = None
-    bias_key_used = None
     try:
         eos_bias_val = os.getenv("LLM_EOS_BIAS", None)
         if eos_bias_val is None:
@@ -186,12 +185,32 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     except Exception:
         eos_bias_value = None
 
-    # prefer configured key, then fallbacks
+    # end-token positive bias map (and EOS negative)
+    bias_map = None
+    end_token_ids = []
+    try:
+        if eos_bias_value is not None or require_end:
+            bias_map = {}
+            # EOS discourage (llama.cpp EOS = 2)
+            if eos_bias_value is not None:
+                bias_map[2] = eos_bias_value
+            # Encourage literal end marker tokens
+            if require_end:
+                try:
+                    end_token_ids = llm.tokenize(end_token_str.encode("utf-8"))
+                    for tid in end_token_ids:
+                        # gentle positive bias per sub-token of the marker
+                        bias_map[tid] = bias_map.get(tid, 0.0) + 8.0
+                except Exception:
+                    end_token_ids = []
+    except Exception:
+        bias_map = None
+
+    # choose adapter key for logit bias (config/env + fallbacks)
     candidate_bias_keys = []
     pref_key = os.getenv("LLM_LOGIT_BIAS_KEY", s.get("logit_bias_key", None))
     if pref_key:
         candidate_bias_keys.append(pref_key)
-    # common fallbacks
     for k in ("logit_bias", "logit-bias", "logit_bias_map"):
         if k not in candidate_bias_keys:
             candidate_bias_keys.append(k)
@@ -217,38 +236,38 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     except Exception as e:
         logging.warning(f"[request] failed to log param snapshot: {e}")
 
-    # ---- Call model (with progressive fallback for EOS bias kwarg) ----
-    def _try_call(with_bias_key: str = None):
-        call_params = dict(params)
-        if with_bias_key and eos_bias_value is not None:
-            # llama.cpp EOS token id is 2
-            call_params[with_bias_key] = {2: eos_bias_value}
-        return llm.create_chat_completion(messages=messages, **call_params)
+    # ---- Call model (with progressive fallback for bias kwarg) ----
+    bias_key_used = None
+
+    def _try_call(with_bias_key: str = None, given_params=None, given_messages=None):
+        call_params = dict(given_params or params)
+        if with_bias_key and bias_map:
+            call_params[with_bias_key] = bias_map
+        return llm.create_chat_completion(messages=(given_messages or messages), **call_params)
 
     response = None
-    if eos_bias_value is not None:
+    if bias_map:
         for key in candidate_bias_keys:
             try:
                 response = _try_call(key)
                 bias_key_used = key
                 break
             except TypeError as te:
-                # unexpected keyword argument '<key>' -> try next
                 if f"unexpected keyword argument '{key}'" in str(te):
                     continue
-                # other TypeError -> re-raise
                 raise
             except Exception:
-                # other error: try next key
                 continue
 
     if response is None:
-        # either no eos bias requested, or all keys failed -> call without bias
         response = _try_call(None)
-        logging.info("[request] eos_bias=none (no bias or adapter ignored)")
+        logging.info("[request] eos_bias=end-token-bias=%s",
+                     "none" if not bias_map else "adapter-ignored")
 
     if bias_key_used:
-        logging.info("[request] eos_bias_applied=%s={2: %s}", bias_key_used, eos_bias_value)
+        logging.info("[request] eos_bias_applied=%s=%s; end_token_ids=%s",
+                     bias_key_used, {2: eos_bias_value} if eos_bias_value is not None else {},
+                     end_token_ids if end_token_ids else "[]")
 
     # ---- Extract text + finish reason ----
     choice = (response.get("choices") or [{}])[0]
@@ -283,30 +302,47 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         f"total_tokens={total_tokens if total_tokens is not None else 'unknown'}"
     )
 
-    # ---- Require-end enforcement (one-shot) ----
-    if require_end and "<<END>>" not in out:
-        logging.warning("[require_end_token] <<END>> not found; issuing one-shot continuation")
+    # ---- Require-end enforcement (multi-continue, capped) ----
+    # max_continues: env -> per-model -> default 1
+    def _int_or(default_v: int, v):
+        try:
+            return int(v)
+        except Exception:
+            return default_v
+
+    max_continues = _int_or(1, os.getenv("STORY_MAX_CONTINUES", s.get("max_continues", 1)))
+    continues = 0
+
+    def _headroom(current_out: str) -> int:
+        try:
+            out_tok = len(llm.tokenize(current_out.encode("utf-8")))
+            return max(128, n_ctx - (prompt_token_count or 0) - out_tok - SAFETY_MARGIN)
+        except Exception:
+            return max(128, remaining_ctx // 2)
+
+    while require_end and (end_token_str not in out) and (continues < max_continues):
+        continues += 1
+        logging.warning("[require_end_token] '%s' not found; continuation attempt %d/%d",
+                        end_token_str, continues, max_continues)
+
         cont_messages = list(messages) + [
             {"role": "assistant", "content": out},
             {"role": "user", "content":
-                "Continue the same scene seamlessly without restarting. "
-                "When complete, end with <<END>> on its own line. Prose only."}
+                f"Continue the same scene seamlessly without restarting. "
+                f"When complete, end with {end_token_str} on its own line. Prose only."}
         ]
-        # conservative chunk to avoid context overflow
-        try:
-            out_tok = len(llm.tokenize(out.encode("utf-8")))
-            headroom = max(128, n_ctx - (prompt_token_count or 0) - out_tok - SAFETY_MARGIN)
-        except Exception:
-            headroom = max(128, remaining_ctx // 2)
-
+        headroom = _headroom(out)
         cont_params = dict(params)
         cont_params["max_tokens"] = max(256, min(int(params.get("max_tokens", 1024) * 0.6), headroom))
 
-        # continuation attempt respects whatever bias key worked the first time
-        if bias_key_used and eos_bias_value is not None:
-            cont_params[bias_key_used] = {2: eos_bias_value}
+        # carry through the same bias key if we had one
+        if bias_key_used and bias_map:
+            cont_call_params = dict(cont_params)
+            cont_call_params[bias_key_used] = bias_map
+            cont_resp = llm.create_chat_completion(messages=cont_messages, **cont_call_params)
+        else:
+            cont_resp = llm.create_chat_completion(messages=cont_messages, **cont_params)
 
-        cont_resp = llm.create_chat_completion(messages=cont_messages, **cont_params)
         cont_choice = (cont_resp.get("choices") or [{}])[0]
         cont_msg = cont_choice.get("message", {})
         cont_text = cont_msg.get("content") or cont_choice.get("text", "") or ""
@@ -314,9 +350,14 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         if addition:
             out = (out + ("\n\n" if not out.endswith("\n") else "") + addition).strip()
 
-        if "<<END>>" not in out:
-            logging.warning("[require_end_token] still missing after continuation; appending <<END>>")
-            out = out.rstrip() + ("\n" if not out.endswith("\n") else "") + "<<END>>"
+        if end_token_str in out:
+            break
+
+    # Final failsafe: append end marker so downstream never hangs
+    if require_end and end_token_str not in out:
+        logging.warning("[require_end_token] still missing after %d attempt(s); appending %s",
+                        continues, end_token_str)
+        out = out.rstrip() + ("\n" if not out.endswith("\n") else "") + end_token_str
 
     logging.info("reply_len=%d", len(out))
     return out
