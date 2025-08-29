@@ -89,47 +89,33 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     llm = get_model(model_key)
     s = _settings_for(model_key)
 
-    # Determine context + remaining space
-    # n_ctx is what we initialized the model with
+    # ---- context accounting ----
     prompt_token_count = None
-    n_ctx = None
+    n_ctx = int(os.getenv("LLM_N_CTX", str(s.get("n_ctx", 4096))))
     try:
         prompt_str = format_messages(messages)
         prompt_tokens = llm.tokenize(prompt_str.encode("utf-8"))
         prompt_token_count = len(prompt_tokens)
-        # match the constructor value (we don't have a public getter)
-        n_ctx = int(os.getenv("LLM_N_CTX", str(s.get("n_ctx", 4096))))
         remaining_ctx = max(256, n_ctx - prompt_token_count - SAFETY_MARGIN)
     except Exception:
         remaining_ctx = 1024
 
-    # max_tokens priority: env > config > remaining_ctx
-    max_tokens_cfg = int(s.get("max_tokens")) if "max_tokens" in s else None
+    # ---- max tokens (env > config > remaining_ctx) ---
+    max_tokens_cfg = s.get("max_tokens")
     max_tokens_env = os.getenv("LLM_MAX_TOKENS")
+    max_tokens = None
     if max_tokens_env is not None:
         try:
             max_tokens = int(max_tokens_env)
         except ValueError:
             max_tokens = None
-    else:
+    elif isinstance(max_tokens_cfg, int):
         max_tokens = max_tokens_cfg
 
-    # always cap by remaining_ctx to avoid overflow
-    if max_tokens is None:
-        max_tokens_final = remaining_ctx
-    else:
-        max_tokens_final = max(1, min(max_tokens, remaining_ctx))
+    max_tokens_final = max(1, min(max_tokens or remaining_ctx, remaining_ctx))
 
-    # Log prompt-side usage before calling the model
-    if prompt_token_count is not None:
-        logging.info(
-            f"[tokens] model={model_key} prompt_tokens={prompt_token_count} "
-            f"n_ctx={n_ctx if n_ctx is not None else 'unknown'} "
-            f"max_gen_tokens={max_tokens_final}"
-        )
-
-    request_payload = {
-        "messages": messages,
+    # ---- sampling/decoding params (env overlaying config defaults) ----
+    params = {
         "temperature": float(os.getenv("LLM_TEMP", str(s.get("temperature", 0.7)))),
         "top_p": float(os.getenv("LLM_TOP_P", str(s.get("top_p", 0.95)))),
         "top_k": int(os.getenv("LLM_TOP_K", str(s.get("top_k", 40)))),
@@ -140,24 +126,68 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         "max_tokens": max_tokens_final,
     }
 
-    logging.info("[debug] full request payload (truncated): %s",
-                 json.dumps(request_payload, indent=2)[:1000])
+    # Optional penalties (only some builds honor these; we still pass them if set)
+    pres = os.getenv("LLM_PRESENCE_PENALTY", None)
+    freq = os.getenv("LLM_FREQUENCY_PENALTY", None)
+    if pres is None and "presence_penalty" in s:
+        pres = str(s.get("presence_penalty"))
+    if freq is None and "frequency_penalty" in s:
+        freq = str(s.get("frequency_penalty"))
+    if pres is not None:
+        try:
+            params["presence_penalty"] = float(pres)
+        except ValueError:
+            pass
+    if freq is not None:
+        try:
+            params["frequency_penalty"] = float(freq)
+        except ValueError:
+            pass
 
-    response = llm.create_chat_completion(
-        messages=messages,
-        temperature=request_payload["temperature"],
-        top_p=request_payload["top_p"],
-        top_k=request_payload["top_k"],
-        repeat_penalty=request_payload["repeat_penalty"],
-        presence_penalty=float(os.getenv("LLM_PRESENCE_PENALTY", str(s.get("presence_penalty", 0.0)))),
-        frequency_penalty=float(os.getenv("LLM_FREQUENCY_PENALTY", str(s.get("frequency_penalty", 0.0)))),
-        mirostat_mode=request_payload["mirostat_mode"],
-        mirostat_tau=request_payload["mirostat_tau"],
-        mirostat_eta=request_payload["mirostat_eta"],
-        max_tokens=request_payload["max_tokens"],
-    )
+    # Stop sequences (prefer a single sentinel)
+    stop_cfg = s.get("stop")
+    stop_env = os.getenv("LLM_STOP")
+    stop = None
+    if stop_env:
+        stop = [x for x in (stop_env.split(",")) if x]
+    elif isinstance(stop_cfg, list):
+        stop = stop_cfg
+    elif isinstance(stop_cfg, str):
+        stop = [stop_cfg]
+    if stop:
+        params["stop"] = stop
 
-    # Different builds return slightly different shapes
+    # ---- Logging: tokens + param snapshot + message meta (not full text) ----
+    if prompt_token_count is not None:
+        logging.info(
+            f"[tokens] model={model_key} prompt_tokens={prompt_token_count} "
+            f"n_ctx={n_ctx} max_gen_tokens={max_tokens_final}"
+        )
+
+    try:
+        # message meta: count + approximate size
+        msg_sizes = [len((m.get("content") or "").encode("utf-8")) for m in messages]
+        logging.info(
+            "[request] model=%s temp=%.3f top_p=%.3f top_k=%d repeat_penalty=%.3f "
+            "mirostat_mode=%d mirostat_tau=%.2f mirostat_eta=%.3f max_tokens=%d stop=%s "
+            "presence_penalty=%s frequency_penalty=%s messages=%d bytes=%d",
+            model_key,
+            params["temperature"], params["top_p"], params["top_k"], params["repeat_penalty"],
+            params["mirostat_mode"], params["mirostat_tau"], params["mirostat_eta"],
+            params["max_tokens"], params.get("stop", "-"),
+            str(params.get("presence_penalty", "n/a")), str(params.get("frequency_penalty", "n/a")),
+            len(messages), sum(msg_sizes),
+        )
+        # Also log role distribution to confirm order/shape
+        roles = [m.get("role","") for m in messages]
+        logging.info("[request] message_roles=%s", roles)
+    except Exception as e:
+        logging.warning(f"[request] failed to log param snapshot: {e}")
+
+    # ---- Call model ----
+    response = llm.create_chat_completion(messages=messages, **params)
+
+    # ---- Extract text ----
     choice = (response.get("choices") or [{}])[0]
     msg = choice.get("message", {})
     text = msg.get("content")
@@ -165,17 +195,15 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         text = choice.get("text", "")
     out = (text or "").strip()
 
-    # Try to get usage from llama.cpp/llama-cpp-python; otherwise approximate
+    # ---- Usage logging ----
     usage = response.get("usage") or {}
     comp_tokens = usage.get("completion_tokens")
     prmpt_tokens_from_usage = usage.get("prompt_tokens", prompt_token_count)
-
     if comp_tokens is None:
         try:
             comp_tokens = len(llm.tokenize(out.encode("utf-8")))
         except Exception:
             comp_tokens = -1
-
     total_tokens = None
     try:
         total_tokens = (prmpt_tokens_from_usage or 0) + (comp_tokens or 0)
@@ -183,10 +211,11 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         pass
 
     logging.info(
-        f"[tokens] model={model_key} "
-        f"prompt_tokens={prmpt_tokens_from_usage if prmpt_tokens_from_usage is not None else 'unknown'} "
+        f"[tokens] model={model_key} prompt_tokens={prmpt_tokens_from_usage if prmpt_tokens_from_usage is not None else 'unknown'} "
         f"completion_tokens={comp_tokens if comp_tokens is not None else 'unknown'} "
         f"total_tokens={total_tokens if total_tokens is not None else 'unknown'}"
     )
 
     return out
+
+
