@@ -120,7 +120,7 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         "top_k": int(os.getenv("LLM_TOP_K", str(s.get("top_k", 40)))),
         "repeat_penalty": float(os.getenv("LLM_REPEAT_PENALTY", str(s.get("repeat_penalty", 1.07)))),
         "max_tokens": max_tokens_final,
-        "ignore_eos": True,  # let prose continue; we still cap with max_tokens
+        # removed "ignore_eos": True (backend rejects this kwarg)
     }
 
     # optional typical sampling
@@ -178,12 +178,12 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
         msg_sizes = [len((m.get("content") or "").encode("utf-8")) for m in messages]
         logging.info(
             "[request] model=%s temp=%.3f top_p=%.3f top_k=%d rep=%.3f typ=%.3f "
-            "pres=%.3f freq=%.3f ignore_eos=%s max_tokens=%d stop=%s messages=%d bytes=%d",
+            "pres=%.3f freq=%.3f max_tokens=%d stop=%s messages=%d bytes=%d",
             model_key,
             params["temperature"], params["top_p"], params["top_k"], params["repeat_penalty"],
             params.get("typical_p", -1.0),
             params["presence_penalty"], params["frequency_penalty"],
-            params["ignore_eos"], params["max_tokens"], params.get("stop", "-"),
+            params["max_tokens"], params.get("stop", "-"),
             len(messages), sum(msg_sizes),
         )
         roles = [m.get("role","") for m in messages]
