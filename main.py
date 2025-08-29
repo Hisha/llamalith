@@ -110,6 +110,7 @@ class ReplyRequest(BaseModel):
     model: str
     content: str
     system_prompt: str = ""
+    assistant_context: Optional[str] = None
 
 # --------------------------------------------------------------------
 # Helpers
@@ -278,8 +279,15 @@ async def get_job_api(job_id: int):
 # Reply within an existing conversation
 @app.post("/api/conversations/{conversation_id}/reply", dependencies=[Depends(require_api_auth)])
 async def reply_conversation(conversation_id: str, body: ReplyRequest):
-    job_id = enqueue_user_message(conversation_id, body.content, body.model, body.system_prompt)
-    # Preserve original minimal response shape
+    # Preserve order: system → assistant → user
+    if body.system_prompt:
+        add_message(conversation_id, "system", body.system_prompt)
+    if body.assistant_context:
+        add_message(conversation_id, "assistant", body.assistant_context)
+    add_message(conversation_id, "user", body.content)
+
+    # Enqueue the job (same as before)
+    job_id = queue_prompt(conversation_id, body.content, body.model, body.system_prompt)
     return {"job_id": job_id}
 
 # Create-or-continue conversation and (optionally) enqueue work
