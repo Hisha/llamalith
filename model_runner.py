@@ -111,74 +111,81 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
             max_tokens = None
     elif isinstance(max_tokens_cfg, int):
         max_tokens = max_tokens_cfg
-
     max_tokens_final = max(1, min(max_tokens or remaining_ctx, remaining_ctx))
 
     # ---- sampling/decoding params (env overlaying config defaults) ----
     params = {
-        "temperature": float(os.getenv("LLM_TEMP", str(s.get("temperature", 0.7)))),
-        "top_p": float(os.getenv("LLM_TOP_P", str(s.get("top_p", 0.95)))),
+        "temperature": float(os.getenv("LLM_TEMP", str(s.get("temperature", 0.8)))),
+        "top_p": float(os.getenv("LLM_TOP_P", str(s.get("top_p", 0.9)))),
         "top_k": int(os.getenv("LLM_TOP_K", str(s.get("top_k", 40)))),
-        "repeat_penalty": float(os.getenv("LLM_REPEAT_PENALTY", str(s.get("repeat_penalty", 1.1)))),
-        "mirostat_mode": int(os.getenv("LLM_MIROS", str(s.get("mirostat_mode", 0)))),
-        "mirostat_tau": float(os.getenv("LLM_MIROS_TAU", str(s.get("mirostat_tau", 5.0)))),
-        "mirostat_eta": float(os.getenv("LLM_MIROS_ETA", str(s.get("mirostat_eta", 0.1)))),
+        "repeat_penalty": float(os.getenv("LLM_REPEAT_PENALTY", str(s.get("repeat_penalty", 1.07)))),
         "max_tokens": max_tokens_final,
+        "ignore_eos": True,  # let prose continue; we still cap with max_tokens
     }
 
-    # Optional penalties (only some builds honor these; we still pass them if set)
-    pres = os.getenv("LLM_PRESENCE_PENALTY", None)
-    freq = os.getenv("LLM_FREQUENCY_PENALTY", None)
-    if pres is None and "presence_penalty" in s:
-        pres = str(s.get("presence_penalty"))
-    if freq is None and "frequency_penalty" in s:
-        freq = str(s.get("frequency_penalty"))
-    if pres is not None:
-        try:
-            params["presence_penalty"] = float(pres)
-        except ValueError:
-            pass
-    if freq is not None:
-        try:
-            params["frequency_penalty"] = float(freq)
-        except ValueError:
-            pass
+    # optional typical sampling
+    try:
+        typ = os.getenv("LLM_TYPICAL_P", str(s.get("typical_p", 0.97)))
+        if typ is not None:
+            params["typical_p"] = float(typ)
+    except Exception:
+        pass
 
-    # Stop sequences (prefer a single sentinel)
-    stop_cfg = s.get("stop")
-    stop_env = os.getenv("LLM_STOP")
+    # presence/frequency penalties: default to 0.0 for prose
+    def _float_or_none(v):
+        try:
+            return float(v)
+        except Exception:
+            return None
+
+    pres = os.getenv("LLM_PRESENCE_PENALTY", None)
+    if pres is None and "presence_penalty" in s:
+        pres = s.get("presence_penalty")
+    pres_val = _float_or_none(pres)
+    if pres_val is None:
+        pres_val = 0.0
+    params["presence_penalty"] = pres_val
+
+    freq = os.getenv("LLM_FREQUENCY_PENALTY", None)
+    if freq is None and "frequency_penalty" in s:
+        freq = s.get("frequency_penalty")
+    freq_val = _float_or_none(freq)
+    if freq_val is None:
+        freq_val = 0.0
+    params["frequency_penalty"] = freq_val
+
+    # Stop sequences: disable for prose model to avoid early cutoffs
     stop = None
-    if stop_env:
-        stop = [x for x in (stop_env.split(",")) if x]
-    elif isinstance(stop_cfg, list):
-        stop = stop_cfg
-    elif isinstance(stop_cfg, str):
-        stop = [stop_cfg]
+    stop_env = os.getenv("LLM_STOP")
+    stop_cfg = s.get("stop")
+    if not model_key.endswith("-novelchapter"):
+        if stop_env:
+            stop = [x for x in stop_env.split(",") if x]
+        elif isinstance(stop_cfg, list):
+            stop = stop_cfg
+        elif isinstance(stop_cfg, str):
+            stop = [stop_cfg]
     if stop:
         params["stop"] = stop
 
-    # ---- Logging: tokens + param snapshot + message meta (not full text) ----
+    # ---- Logging: tokens + param snapshot (no full prompts) ----
     if prompt_token_count is not None:
         logging.info(
             f"[tokens] model={model_key} prompt_tokens={prompt_token_count} "
             f"n_ctx={n_ctx} max_gen_tokens={max_tokens_final}"
         )
-
     try:
-        # message meta: count + approximate size
         msg_sizes = [len((m.get("content") or "").encode("utf-8")) for m in messages]
         logging.info(
-            "[request] model=%s temp=%.3f top_p=%.3f top_k=%d repeat_penalty=%.3f "
-            "mirostat_mode=%d mirostat_tau=%.2f mirostat_eta=%.3f max_tokens=%d stop=%s "
-            "presence_penalty=%s frequency_penalty=%s messages=%d bytes=%d",
+            "[request] model=%s temp=%.3f top_p=%.3f top_k=%d rep=%.3f typ=%.3f "
+            "pres=%.3f freq=%.3f ignore_eos=%s max_tokens=%d stop=%s messages=%d bytes=%d",
             model_key,
             params["temperature"], params["top_p"], params["top_k"], params["repeat_penalty"],
-            params["mirostat_mode"], params["mirostat_tau"], params["mirostat_eta"],
-            params["max_tokens"], params.get("stop", "-"),
-            str(params.get("presence_penalty", "n/a")), str(params.get("frequency_penalty", "n/a")),
+            params.get("typical_p", -1.0),
+            params["presence_penalty"], params["frequency_penalty"],
+            params["ignore_eos"], params["max_tokens"], params.get("stop", "-"),
             len(messages), sum(msg_sizes),
         )
-        # Also log role distribution to confirm order/shape
         roles = [m.get("role","") for m in messages]
         logging.info("[request] message_roles=%s", roles)
     except Exception as e:
@@ -187,8 +194,12 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     # ---- Call model ----
     response = llm.create_chat_completion(messages=messages, **params)
 
-    # ---- Extract text ----
+    # ---- Extract text + finish reason ----
     choice = (response.get("choices") or [{}])[0]
+    finish = choice.get("finish_reason") or response.get("finish_reason")
+    if finish:
+        logging.info("[response] finish_reason=%s", finish)
+
     msg = choice.get("message", {})
     text = msg.get("content")
     if text is None:
@@ -217,5 +228,3 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     )
 
     return out
-
-
