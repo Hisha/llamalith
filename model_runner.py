@@ -128,16 +128,33 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
             f"max_gen_tokens={max_tokens_final}"
         )
 
+    request_payload = {
+        "messages": messages,
+        "temperature": float(os.getenv("LLM_TEMP", str(s.get("temperature", 0.7)))),
+        "top_p": float(os.getenv("LLM_TOP_P", str(s.get("top_p", 0.95)))),
+        "top_k": int(os.getenv("LLM_TOP_K", str(s.get("top_k", 40)))),
+        "repeat_penalty": float(os.getenv("LLM_REPEAT_PENALTY", str(s.get("repeat_penalty", 1.1)))),
+        "mirostat_mode": int(os.getenv("LLM_MIROS", str(s.get("mirostat_mode", 0)))),
+        "mirostat_tau": float(os.getenv("LLM_MIROS_TAU", str(s.get("mirostat_tau", 5.0)))),
+        "mirostat_eta": float(os.getenv("LLM_MIROS_ETA", str(s.get("mirostat_eta", 0.1)))),
+        "max_tokens": max_tokens_final,
+    }
+
+    logging.info("[debug] full request payload (truncated): %s",
+                 json.dumps(request_payload, indent=2)[:1000])
+
     response = llm.create_chat_completion(
         messages=messages,
-        temperature=float(os.getenv("LLM_TEMP", str(s.get("temperature", 0.7)))),
-        top_p=float(os.getenv("LLM_TOP_P", str(s.get("top_p", 0.95)))),
-        top_k=int(os.getenv("LLM_TOP_K", str(s.get("top_k", 40)))),
-        repeat_penalty=float(os.getenv("LLM_REPEAT_PENALTY", str(s.get("repeat_penalty", 1.1)))),
-        mirostat_mode=int(os.getenv("LLM_MIROS", str(s.get("mirostat_mode", 0)))),   # 0/1/2
-        mirostat_tau=float(os.getenv("LLM_MIROS_TAU", str(s.get("mirostat_tau", 5.0)))),
-        mirostat_eta=float(os.getenv("LLM_MIROS_ETA", str(s.get("mirostat_eta", 0.1)))),
-        max_tokens=max_tokens_final,
+        temperature=request_payload["temperature"],
+        top_p=request_payload["top_p"],
+        top_k=request_payload["top_k"],
+        repeat_penalty=request_payload["repeat_penalty"],
+        presence_penalty=float(os.getenv("LLM_PRESENCE_PENALTY", str(s.get("presence_penalty", 0.0)))),
+        frequency_penalty=float(os.getenv("LLM_FREQUENCY_PENALTY", str(s.get("frequency_penalty", 0.0)))),
+        mirostat_mode=request_payload["mirostat_mode"],
+        mirostat_tau=request_payload["mirostat_tau"],
+        mirostat_eta=request_payload["mirostat_eta"],
+        max_tokens=request_payload["max_tokens"],
     )
 
     # Different builds return slightly different shapes
