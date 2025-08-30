@@ -288,7 +288,14 @@ async def reply_conversation(conversation_id: str, body: ReplyRequest):
 
     # Enqueue the job (same as before)
     job_id = queue_prompt(conversation_id, body.content, body.model, body.system_prompt)
-    return {"job_id": job_id}
+    return {
+        "ok": True,
+        "queued": True,
+        "job_id": job_id,
+        "conversation_id": conversation_id,
+        "created_new": False,
+        "model": body.model,
+    }
 
 # Create-or-continue conversation and (optionally) enqueue work
 @app.post("/api/jobs", dependencies=[Depends(require_api_auth)])
@@ -296,6 +303,7 @@ async def create_job(payload: dict = Body(...)):
     content = (payload.get("content") or "").strip()
     model = (payload.get("model") or "mistral").strip()
     system_prompt = (payload.get("system_prompt") or "").strip()
+    assistant_context = (payload.get("assistant_context") or "").strip()
     conv_id_raw = (payload.get("conversation_id") or "").strip()
 
     if not content and not system_prompt:
@@ -311,7 +319,16 @@ async def create_job(payload: dict = Body(...)):
 
     job_id = None
     if content:
-        job_id = enqueue_user_message(conversation_id, content, model, system_prompt)
+        if assistant_context:
+            # Manual ordering: system → assistant → user
+            if system_prompt:
+                add_message(conversation_id, "system", system_prompt)
+            add_message(conversation_id, "assistant", assistant_context)
+            add_message(conversation_id, "user", content)
+            job_id = queue_prompt(conversation_id, content, model, system_prompt)
+        else:
+            # Legacy path (no assistant_context): use existing helper
+            job_id = enqueue_user_message(conversation_id, content, model, system_prompt)
 
     return {
         "ok": True,
