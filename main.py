@@ -279,22 +279,21 @@ async def get_job_api(job_id: int):
 # Reply within an existing conversation
 @app.post("/api/conversations/{conversation_id}/reply", dependencies=[Depends(require_api_auth)])
 async def reply_conversation(conversation_id: str, body: ReplyRequest):
-    # Preserve order: system → assistant → user
+    msgs = get_conversation_messages(conversation_id)
+
+    # Add system only if none exists yet
     if body.system_prompt:
-        add_message(conversation_id, "system", body.system_prompt)
+        if not msgs or not any(m.get("role") == "system" for m in msgs):
+            add_message(conversation_id, "system", body.system_prompt)
+
     if body.assistant_context:
         add_message(conversation_id, "assistant", body.assistant_context)
-    add_message(conversation_id, "user", body.content)
 
-    # Enqueue the job (same as before)
+    add_message(conversation_id, "user", body.content)
     job_id = queue_prompt(conversation_id, body.content, body.model, body.system_prompt)
     return {
-        "ok": True,
-        "queued": True,
-        "job_id": job_id,
-        "conversation_id": conversation_id,
-        "created_new": False,
-        "model": body.model,
+      "ok": True, "queued": True, "job_id": job_id,
+      "conversation_id": conversation_id, "created_new": False, "model": body.model
     }
 
 # Create-or-continue conversation and (optionally) enqueue work
