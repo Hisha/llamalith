@@ -7,6 +7,15 @@ from uuid import uuid4
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "memory.db")
 
+# --- add near top (after DB_PATH etc.) ---
+def _ensure_column(conn, table: str, column: str, decl: str):
+    c = conn.cursor()
+    c.execute(f"PRAGMA table_info({table})")
+    cols = {row[1] for row in c.fetchall()}
+    if column not in cols:
+        c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        conn.commit()
+
 def init_db():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     c = conn.cursor()
@@ -46,6 +55,8 @@ def init_db():
         )
     """)
 
+    _ensure_column(conn, "chat_queue", "grammar_name", "TEXT")
+    
     conn.commit()
     conn.close()
 
@@ -107,13 +118,13 @@ def get_conversation_messages(conversation_id: str):
     return [{"role": role, "content": content} for role, content in rows]
 
 # --- Queue Operations ---
-def queue_prompt(conversation_id: str, user_input: str, model: str, system_prompt: str):
+def queue_prompt(conversation_id: str, user_input: str, model: str, system_prompt: str, grammar_name: str = None):
     conn = get_db_connection()
     c = conn.cursor()
     c.execute("""
-        INSERT INTO chat_queue (conversation_id, user_input, model, system_prompt)
-        VALUES (?, ?, ?, ?)
-    """, (conversation_id, user_input, model, system_prompt))
+        INSERT INTO chat_queue (conversation_id, user_input, model, system_prompt, grammar_name)
+        VALUES (?, ?, ?, ?, ?)
+    """, (conversation_id, user_input, model, system_prompt, (grammar_name or "").strip() or None))
     queue_id = c.lastrowid
     conn.commit()
     conn.close()
@@ -126,7 +137,7 @@ def claim_next_job():
     try:
         c.execute("BEGIN IMMEDIATE")
         c.execute("""
-            SELECT id, conversation_id, user_input, model, system_prompt
+            SELECT id, conversation_id, user_input, model, system_prompt, grammar_name
             FROM chat_queue
             WHERE status = 'queued'
             ORDER BY created_at ASC
@@ -138,7 +149,7 @@ def claim_next_job():
             conn.close()
             return None
 
-        job_id, convo_id, user_input, model, system_prompt = row
+        job_id, convo_id, user_input, model, system_prompt, grammar_name = row
         c.execute("UPDATE chat_queue SET status = 'processing' WHERE id = ?", (job_id,))
         c.execute("COMMIT")
         conn.close()
@@ -147,7 +158,8 @@ def claim_next_job():
             "conversation_id": convo_id,
             "user_input": user_input,
             "model": model,
-            "system_prompt": system_prompt
+            "system_prompt": system_prompt,
+            "grammar_name": grammar_name
         }
     except Exception:
         c.execute("ROLLBACK")
