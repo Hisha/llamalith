@@ -2,7 +2,7 @@ import os
 import json
 import logging 
 from typing import List, Dict, Any
-from llama_cpp import Llama
+from llama_cpp import Llama, LlamaGrammar
 
 SAFETY_MARGIN = int(os.getenv("LLM_SAFETY_MARGIN", "128"))
 
@@ -91,15 +91,14 @@ def run_model(model_key: str, messages: List[Dict[str, str]], grammar_name: str 
     llm = get_model(model_key)
     s = _settings_for(model_key)
 
-    # --- Grammar file option ---
+    # ---- Grammar file option ----
     grammar_text = None
+    grammar_path = None
     if grammar_name:
-        # sanitize: allow only safe filename chars
         safe = "".join(ch for ch in grammar_name if ch.isalnum() or ch in ("-", "_", ".", "+"))
-        # drop path components
         safe = os.path.basename(safe)
         if not safe.endswith(".gbnf"):
-            safe = safe + ".gbnf"
+            safe += ".gbnf"
         grammar_dir = os.getenv("LLM_GRAMMAR_DIR", "/home/smithkt/llama.cpp/grammars")
         grammar_path = os.path.join(grammar_dir, safe)
         try:
@@ -225,9 +224,16 @@ def run_model(model_key: str, messages: List[Dict[str, str]], grammar_name: str 
         bias_map = None
 
     if grammar_text:
-        params.pop("stop", None)     # grammar governs termination
-        require_end = False          # skip manual continuation loop
-        params["grammar"] = grammar_text
+        # Grammar governs termination; disable other stoppers
+        params.pop("stop", None)
+        require_end = False
+        # Build a LlamaGrammar object (root rule is "root" in your .gbnf)
+        try:
+            params["grammar"] = LlamaGrammar.from_string(grammar_text, root="root")
+            # If you prefer to avoid reading the file yourself:
+            # params["grammar"] = LlamaGrammar.from_file(grammar_path, root="root")
+        except Exception as e:
+            logging.exception("[grammar] failed to construct LlamaGrammar: %s", e)
     
     # choose adapter key for logit bias (config/env + fallbacks)
     candidate_bias_keys = []
