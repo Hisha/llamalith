@@ -90,6 +90,7 @@ def worker_loop(worker_id: int):
             model_key = job["model"]
             user_input = (job.get("user_input") or "").strip()
             system_prompt = (job.get("system_prompt") or "").strip()
+            grammar_name = (job.get("grammar_name") or "").strip() or None
 
             logging.info(f"claimed job={jid} model={model_key} convo={convo_id} ulen={len(user_input)}")
 
@@ -105,7 +106,7 @@ def worker_loop(worker_id: int):
                 history.insert(0, {"role": "system", "content": system_prompt})
 
             logging.info(f"history_turns={len(history)}; calling model…")
-            reply = (run_model(model_key, history) or "").strip()
+            reply = (run_model(model_key, history, grammar_name=grammar_name) or "").strip()
             logging.info(f"reply_len={len(reply)}")
 
             if not reply:
