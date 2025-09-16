@@ -224,16 +224,30 @@ def run_model(model_key: str, messages: List[Dict[str, str]], grammar_name: str 
         bias_map = None
 
     if grammar_text:
-        # Grammar governs termination; disable other stoppers
         params.pop("stop", None)
         require_end = False
-        # Build a LlamaGrammar object (root rule is "root" in your .gbnf)
+
+        # Build a LlamaGrammar object, handling version differences
+        grammar_obj = None
         try:
-            params["grammar"] = LlamaGrammar.from_string(grammar_text, root="root")
-            # If you prefer to avoid reading the file yourself:
-            # params["grammar"] = LlamaGrammar.from_file(grammar_path, root="root")
-        except Exception as e:
-            logging.exception("[grammar] failed to construct LlamaGrammar: %s", e)
+            # newer builds may support positional root
+            grammar_obj = LlamaGrammar.from_string(grammar_text, "root")
+        except TypeError:
+            try:
+                # older builds: default root is "root"
+                grammar_obj = LlamaGrammar.from_string(grammar_text)
+            except Exception as e1:
+                try:
+                    # final fallback: load directly from the file
+                    grammar_obj = LlamaGrammar.from_file(grammar_path)
+                except Exception as e2:
+                    logging.exception("[grammar] failed to construct LlamaGrammar (string & file): %s / %s", e1, e2)
+
+        if grammar_obj is not None:
+            params["grammar"] = grammar_obj
+            logging.info("[grammar] attached OK")
+        else:
+            logging.warning("[grammar] disabled due to construction error; proceeding without grammar")
     
     # choose adapter key for logit bias (config/env + fallbacks)
     candidate_bias_keys = []
