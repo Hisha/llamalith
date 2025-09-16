@@ -105,12 +105,14 @@ class CreateJobRequest(BaseModel):
     content: str
     conversation_id: str
     system_prompt: str = ""
+    grammar_name: Optional[str] = None
 
 class ReplyRequest(BaseModel):
     model: str
     content: str
     system_prompt: str = ""
     assistant_context: Optional[str] = None
+    grammar_name: Optional[str] = None
 
 # --------------------------------------------------------------------
 # Helpers
@@ -131,12 +133,11 @@ def status_badge(status: str) -> str:
       </span>
     """
 
-def enqueue_user_message(conversation_id: str, content: str, model: str, system_prompt: str = "") -> int:
-    """Single path to add messages and enqueue a job."""
+def enqueue_user_message(conversation_id: str, content: str, model: str, system_prompt: str = "", grammar_name: str = None) -> int:
     if system_prompt:
         add_message(conversation_id, "system", system_prompt)
     add_message(conversation_id, "user", content)
-    return queue_prompt(conversation_id, content, model, system_prompt)
+    return queue_prompt(conversation_id, content, model, system_prompt, grammar_name)
 
 # ====================================================================
 # GET
@@ -280,21 +281,14 @@ async def get_job_api(job_id: int):
 @app.post("/api/conversations/{conversation_id}/reply", dependencies=[Depends(require_api_auth)])
 async def reply_conversation(conversation_id: str, body: ReplyRequest):
     msgs = get_conversation_messages(conversation_id)
-
-    # Add system only if none exists yet
     if body.system_prompt:
         if not msgs or not any(m.get("role") == "system" for m in msgs):
             add_message(conversation_id, "system", body.system_prompt)
-
     if body.assistant_context:
         add_message(conversation_id, "assistant", body.assistant_context)
-
     add_message(conversation_id, "user", body.content)
-    job_id = queue_prompt(conversation_id, body.content, body.model, body.system_prompt)
-    return {
-      "ok": True, "queued": True, "job_id": job_id,
-      "conversation_id": conversation_id, "created_new": False, "model": body.model
-    }
+    job_id = queue_prompt(conversation_id, body.content, body.model, body.system_prompt, body.grammar_name)
+    return {"ok": True, "queued": True, "job_id": job_id, "conversation_id": conversation_id, "created_new": False, "model": body.model}
 
 # Create-or-continue conversation and (optionally) enqueue work
 @app.post("/api/jobs", dependencies=[Depends(require_api_auth)])
@@ -304,6 +298,7 @@ async def create_job(payload: dict = Body(...)):
     system_prompt = (payload.get("system_prompt") or "").strip()
     assistant_context = (payload.get("assistant_context") or "").strip()
     conv_id_raw = (payload.get("conversation_id") or "").strip()
+    grammar_name = (payload.get("grammar_name") or "").strip() or None
 
     if not content and not system_prompt:
         return JSONResponse({"error": "content or system_prompt is required"}, status_code=400)
@@ -324,10 +319,10 @@ async def create_job(payload: dict = Body(...)):
                 add_message(conversation_id, "system", system_prompt)
             add_message(conversation_id, "assistant", assistant_context)
             add_message(conversation_id, "user", content)
-            job_id = queue_prompt(conversation_id, content, model, system_prompt)
+            job_id = queue_prompt(conversation_id, content, model, system_prompt, grammar_name)
         else:
             # Legacy path (no assistant_context): use existing helper
-            job_id = enqueue_user_message(conversation_id, content, model, system_prompt)
+            job_id = enqueue_user_message(conversation_id, content, model, system_prompt, grammar_name)
 
     return {
         "ok": True,
