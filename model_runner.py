@@ -100,7 +100,7 @@ def run_model(model_key: str, messages: List[Dict[str, str]], grammar_name: str 
         safe = os.path.basename(safe)
         if not safe.endswith(".gbnf"):
             safe = safe + ".gbnf"
-        grammar_dir = os.getenv("LLM_GRAMMAR_DIR", "/home/smithkt/llama.cpp/grammers")
+        grammar_dir = os.getenv("LLM_GRAMMAR_DIR", "/home/smithkt/llama.cpp/grammars")
         grammar_path = os.path.join(grammar_dir, safe)
         try:
             with open(grammar_path, "r", encoding="utf-8") as gf:
