@@ -85,12 +85,30 @@ def format_messages(messages: List[Dict[str, str]]) -> str:
     return "".join(parts)
 
 # ---------- inference ----------
-def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
+def run_model(model_key: str, messages: List[Dict[str, str]], grammar_name: str = None) -> str:
     import os, logging
 
     llm = get_model(model_key)
     s = _settings_for(model_key)
 
+    # --- Grammar file option ---
+    grammar_text = None
+    if grammar_name:
+        # sanitize: allow only safe filename chars
+        safe = "".join(ch for ch in grammar_name if ch.isalnum() or ch in ("-", "_", ".", "+"))
+        # drop path components
+        safe = os.path.basename(safe)
+        if not safe.endswith(".gbnf"):
+            safe = safe + ".gbnf"
+        grammar_dir = os.getenv("LLM_GRAMMAR_DIR", "/home/smithkt/llama.cpp/grammers")
+        grammar_path = os.path.join(grammar_dir, safe)
+        try:
+            with open(grammar_path, "r", encoding="utf-8") as gf:
+                grammar_text = gf.read()
+                logging.info("[grammar] using %s", grammar_path)
+        except Exception as e:
+            logging.warning("[grammar] failed to load %s: %s", grammar_path, e)
+    
     # ---- context accounting ----
     prompt_token_count = None
     n_ctx = int(os.getenv("LLM_N_CTX", str(s.get("n_ctx", 4096))))
@@ -206,6 +224,11 @@ def run_model(model_key: str, messages: List[Dict[str, str]]) -> str:
     except Exception:
         bias_map = None
 
+    if grammar_text:
+        params.pop("stop", None)     # grammar governs termination
+        require_end = False          # skip manual continuation loop
+        params["grammar"] = grammar_text
+    
     # choose adapter key for logit bias (config/env + fallbacks)
     candidate_bias_keys = []
     pref_key = os.getenv("LLM_LOGIT_BIAS_KEY", s.get("logit_bias_key", None))
