@@ -61,20 +61,21 @@ def get_model(model_key: str) -> Llama:
     # chat_format: env overrides config, which overrides fallback
     model_format = os.getenv("LLM_CHAT_FORMAT") or MODEL_FORMATS.get(model_key) or "llama-2"
 
-    llama_kwargs = {
-	    "model_path": path,
-	    "n_ctx": n_ctx,
-	    "n_threads": os.cpu_count() or 8,
-	    "n_batch": int(os.getenv("LLM_N_BATCH", "512")),
-	    "use_mmap": True,
-	    "use_mlock": False,
-	    "verbose": False,
+	llama_kwargs = {
+		"model_path": path,
+		"n_ctx": n_ctx,
+		"n_threads": os.cpu_count() or 8,
+		"n_batch": int(os.getenv("LLM_N_BATCH", "512")),
+		"use_mmap": True,
+		"use_mlock": False,
+		"verbose": False,
 	}
 	
 	if model_format and model_format not in ("auto", "chat_template"):
-	    llama_kwargs["chat_format"] = model_format
+		llama_kwargs["chat_format"] = model_format
 	
 	llm = Llama(**llama_kwargs)
+    
     _LOADED[model_key] = llm
     print(f"[llamalith] loaded model={model_key} path={path} model_format={model_format} n_ctx={n_ctx}")
     return llm
