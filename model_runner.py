@@ -23,11 +23,13 @@ else:
         "mistral":  os.getenv("MISTRAL_PATH",  "models/mistral/mistral-7b-instruct-v0.2.Q4_K_M.gguf"),
         "mythomax": os.getenv("MYTHOMAX_PATH", "models/mythomax/mythomax-l2-13b.Q4_K_M.gguf"),
         "openchat": os.getenv("OPENCHAT_PATH", "models/openchat/openchat-3.5-1210.Q8_0.gguf"),
+        "gemma4": os.getenv("GEMMA4_PATH", "models/gemma-4-e4b/gemma-4-E4B-it-Q4_K_M.gguf"),
     }
     MODEL_FORMATS = {
         "mistral":  "mistral-instruct",
         "mythomax": "chatml",
         "openchat": "chatml",
+        "gemma4": "gemma",
     }
 
 # ---------- model cache ----------
