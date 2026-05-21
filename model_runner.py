@@ -34,10 +34,10 @@ else:
         "openchat": "chatml",
         "gemma4": "chat_template",
     }
-
-print(f"[DEBUG] model_key={model_key}")
-print(f"[DEBUG] model_format={model_format}")
-print(f"[DEBUG] path={path}")
+print(f"[DEBUG] available_models={AVAILABLE_MODELS}")
+print(f"[DEBUG] model_settings={MODEL_SETTINGS}")
+print(f"[DEBUG] model_format={MODEL_FORMATS}")
+print(f"[DEBUG] path={MODEL_PATHS}")
 
 # ---------- model cache ----------
 _LOADED: Dict[str, Llama] = {}
