@@ -21,7 +21,7 @@ if os.path.exists(CONFIG_PATH):
     MODEL_FORMATS  = cfg.get("model_formats", {}) or {}
     MODEL_SETTINGS = cfg.get("model_settings", {}) or {}
 else:
-	AVAILABLE_MODELS = ["gemma4", "mistral", "mythomax", "openchat"]
+    AVAILABLE_MODELS = ["gemma4", "mistral", "mythomax", "openchat"]
     MODEL_PATHS = {
         "mistral":  os.getenv("MISTRAL_PATH",  "models/mistral/mistral-7b-instruct-v0.2.Q4_K_M.gguf"),
         "mythomax": os.getenv("MYTHOMAX_PATH", "models/mythomax/mythomax-l2-13b.Q4_K_M.gguf"),
