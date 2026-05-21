@@ -32,7 +32,7 @@ else:
         "mistral":  "mistral-instruct",
         "mythomax": "chatml",
         "openchat": "chatml",
-        "gemma4": "gemma",
+        "gemma4": "chat_template",
     }
 
 # ---------- model cache ----------
