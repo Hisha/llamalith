@@ -35,6 +35,10 @@ else:
         "gemma4": "chat_template",
     }
 
+print(f"[DEBUG] model_key={model_key}")
+print(f"[DEBUG] model_format={model_format}")
+print(f"[DEBUG] path={path}")
+
 # ---------- model cache ----------
 _LOADED: Dict[str, Llama] = {}
 
