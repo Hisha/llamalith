@@ -8,6 +8,7 @@ SAFETY_MARGIN = int(os.getenv("LLM_SAFETY_MARGIN", "128"))
 
 # ---------- config ----------
 CONFIG_PATH = os.getenv("LLAMALITH_CONFIG", "config.json")
+AVAILABLE_MODELS: List[str] = []
 MODEL_PATHS: Dict[str, str] = {}
 MODEL_FORMATS: Dict[str, str] = {}
 MODEL_SETTINGS: Dict[str, Dict[str, Any]] = {}
@@ -15,10 +16,12 @@ MODEL_SETTINGS: Dict[str, Dict[str, Any]] = {}
 if os.path.exists(CONFIG_PATH):
     with open(CONFIG_PATH, "r") as f:
         cfg = json.load(f)
+    AVAILABLE_MODELS = cfg.get("available_models", []) or sorted(MODEL_PATHS.keys())    
     MODEL_PATHS    = cfg.get("model_paths", {}) or {}
     MODEL_FORMATS  = cfg.get("model_formats", {}) or {}
     MODEL_SETTINGS = cfg.get("model_settings", {}) or {}
 else:
+	AVAILABLE_MODELS = ["gemma4", "mistral", "mythomax", "openchat"]
     MODEL_PATHS = {
         "mistral":  os.getenv("MISTRAL_PATH",  "models/mistral/mistral-7b-instruct-v0.2.Q4_K_M.gguf"),
         "mythomax": os.getenv("MYTHOMAX_PATH", "models/mythomax/mythomax-l2-13b.Q4_K_M.gguf"),

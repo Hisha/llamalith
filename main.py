@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
-from model_runner import MODEL_PATHS
+from model_runner import AVAILABLE_MODELS
 from auth_utils import verify_password, require_login, require_api_auth
 
 from memory import (
@@ -34,8 +34,6 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 # --------------------------------------------------------------------
 templates = Jinja2Templates(directory="templates")
 templates.env.globals["root_path"] = "/chat/"
-
-AVAILABLE_MODELS = sorted(MODEL_PATHS.keys())
 templates.env.globals["AVAILABLE_MODELS"] = AVAILABLE_MODELS
 
 SYSTEM_PRESETS = [
