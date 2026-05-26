@@ -36,7 +36,6 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 templates = Jinja2Templates(directory="templates")
 templates.env.globals["root_path"] = "/chat/"
 templates.env.globals["AVAILABLE_MODELS"] = AVAILABLE_MODELS
-templates.env.filters["local_time"] = local_time
 
 SYSTEM_PRESETS = [
     {
@@ -158,6 +157,7 @@ def local_time(value):
 
     return dt.astimezone(LOCAL_TZ).strftime("%Y-%m-%d %I:%M %p")
     
+templates.env.filters["local_time"] = local_time
 # ====================================================================
 # GET
 # ====================================================================
