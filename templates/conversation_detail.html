@@ -31,7 +31,7 @@
             <div class="font-semibold">Job #{{ j.id }}</div>
             <div>Model: {{ j.model }}</div>
             <div>Status: {{ j.status }}</div>
-            <div>Created: {{ j.created_at }}</div>
+            <div>Created: {{ j.created_at|local_time }}</div>
             <div class="mt-1">
               <a class="underline" href="{{ request.scope.root_path }}/jobs" onclick="event.preventDefault(); viewJob({{ j.id }});">
                 View

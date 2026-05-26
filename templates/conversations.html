@@ -21,7 +21,7 @@
           <tr class="border-t border-gray-700">
             <td class="py-2">{{ c[0] }}</td>
             <td class="py-2">{{ c[1] or '(untitled)' }}</td>
-            <td class="py-2">{{ c[2] }}</td>
+            <td class="py-2">{{ c[2]|local_time }}</td>
             <td class="py-2">
               <a class="text-indigo-400 hover:underline"
                  href="{{ request.scope.root_path }}/conversations/{{ c[0] }}">

@@ -425,5 +425,5 @@ async def login_post(request: Request, password: str = Form(...)):
         return RedirectResponse(url="/chat", status_code=303)
 
     return templates.TemplateResponse(
-        "login.html", {"request": request, "error": "Invalid password", "now": datetime.now}
+        "login.html", {"request": request, "error": "Invalid password", "now": lambda: datetime.now(LOCAL_TZ)}
     )
