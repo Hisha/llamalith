@@ -157,7 +157,6 @@ def local_time(value):
         dt = dt.replace(tzinfo=timezone.utc)
 
     return dt.astimezone(LOCAL_TZ).strftime("%Y-%m-%d %I:%M %p")
-
 # ====================================================================
 # GET
 # ====================================================================
