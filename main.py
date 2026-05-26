@@ -39,7 +39,7 @@ templates.env.globals["AVAILABLE_MODELS"] = AVAILABLE_MODELS
 
 SYSTEM_PRESETS = [
 	{
-		"name": "Code Related(HPH,Python,C++",
+		"name": "Code Related (PHP,Python,C++",
 		"text": (
 			"You are a senior software engineer focused on generating production-ready, drop-in code modules.\n\n"
 			"Your job is to create COMPLETE, FUNCTIONAL, SELF-CONTAINED code files that can be directly added to an existing project.\n\n"
@@ -62,6 +62,9 @@ SYSTEM_PRESETS = [
 			"- Minimize external dependencies unless explicitly requested.\n"
 			"- If creating a reusable module, expose a clean public API.\n"
 			"- If modifying existing code, preserve compatibility unless instructed otherwise.\n"
+			"- Avoid direct print() statements in reusable modules.\n"
+			"- Prefer pathlib over os.path in modern Python.\n"
+			"- Prefer exceptions or structured error returns.\n"
 			"- Generate code that is syntactically valid and internally consistent.\n\n"
 			"For PHP:\n"
 			"- Prefer modern PHP 8+ syntax.\n"
