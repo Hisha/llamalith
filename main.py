@@ -7,7 +7,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 from model_runner import AVAILABLE_MODELS
 from auth_utils import verify_password, require_login, require_api_auth
@@ -35,6 +36,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.getenv("SECRET_KEY"))
 templates = Jinja2Templates(directory="templates")
 templates.env.globals["root_path"] = "/chat/"
 templates.env.globals["AVAILABLE_MODELS"] = AVAILABLE_MODELS
+templates.env.filters["local_time"] = local_time
 
 SYSTEM_PRESETS = [
     {
@@ -135,6 +137,27 @@ def enqueue_user_message(conversation_id: str, content: str, model: str, system_
     add_message(conversation_id, "user", content)
     return queue_prompt(conversation_id, content, model, system_prompt, grammar_name)
 
+LOCAL_TZ = ZoneInfo("America/New_York")
+
+def local_time(value):
+    if not value:
+        return ""
+
+    if isinstance(value, str):
+        value = value.replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    else:
+        dt = value
+
+    # Treat naive DB timestamps as UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(LOCAL_TZ).strftime("%Y-%m-%d %I:%M %p")
+
 # ====================================================================
 # GET
 # ====================================================================
@@ -142,7 +165,7 @@ def enqueue_user_message(conversation_id: str, content: str, model: str, system_
 @app.get("/", response_class=HTMLResponse)
 async def chat_ui(request: Request):
     require_login(request)
-    return templates.TemplateResponse("jobs.html", {"request": request, "now": datetime.now})
+    return templates.TemplateResponse("jobs.html", {"request": request, "now": lambda: datetime.now(LOCAL_TZ)})
 
 @app.get("/conversations", response_class=HTMLResponse)
 async def conversations_page(request: Request):
@@ -150,7 +173,7 @@ async def conversations_page(request: Request):
     convos = list_conversations()
     return templates.TemplateResponse(
         "conversations.html",
-        {"request": request, "conversations": convos, "now": datetime.now},
+        {"request": request, "conversations": convos, "now": lambda: datetime.now(LOCAL_TZ)},
     )
 
 @app.get("/conversations/{conversation_id}", response_class=HTMLResponse)
@@ -170,19 +193,19 @@ async def conversation_detail(request: Request, conversation_id: str):
             "jobs": jobs,
             "last_used_model": last_used_model,
             "last_system_prompt": last_system_prompt,
-            "now": datetime.now,
+            "now": lambda: datetime.now(LOCAL_TZ),
         },
     )
 
 @app.get("/image-prompts", response_class=HTMLResponse)
 async def image_prompts_page(request: Request):
     require_login(request)
-    return templates.TemplateResponse("image_prompts.html", {"request": request, "now": datetime.now})
+    return templates.TemplateResponse("image_prompts.html", {"request": request, "now": lambda: datetime.now(LOCAL_TZ)})
 
 @app.get("/jobs", response_class=HTMLResponse)
 async def jobs_ui(request: Request):
     require_login(request)
-    return templates.TemplateResponse("jobs.html", {"request": request, "now": datetime.now})
+    return templates.TemplateResponse("jobs.html", {"request": request, "now": lambda: datetime.now(LOCAL_TZ)})
 
 @app.get("/jobs/rows", response_class=HTMLResponse)
 async def jobs_rows(request: Request, status: Optional[str] = None, limit: int = 100):
@@ -199,7 +222,7 @@ async def jobs_rows(request: Request, status: Optional[str] = None, limit: int =
             <td>{j['conversation_id']}</td>
             <td>{j['model']}</td>
             <td>{badge}</td>
-            <td>{j.get('created_at','')}</td>
+            <td>{local_time(j.get('created_at'))}</td>
             <td><button class="underline text-sm" onclick="viewJob({j['id']})">View</button></td>
           </tr>
         """
@@ -208,7 +231,7 @@ async def jobs_rows(request: Request, status: Optional[str] = None, limit: int =
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "now": datetime.now})
+    return templates.TemplateResponse("login.html", {"request": request, "now": lambda: datetime.now(LOCAL_TZ)})
 
 @app.get("/logout")
 async def logout(request: Request):
