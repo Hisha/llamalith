@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="text-2xl font-bold mb-4">Code Ideas</h2>
+
+<div class="bg-gray-800 rounded p-4 overflow-x-auto">
+  <div class="max-h-[75vh] overflow-y-auto">
+    <table class="w-full text-left text-sm">
+      <thead class="text-gray-300 sticky top-0 bg-gray-800">
+        <tr>
+          <th class="py-2 px-2">ID</th>
+          <th class="py-2 px-2">Language</th>
+          <th class="py-2 px-2">Module</th>
+          <th class="py-2 px-2">File</th>
+          <th class="py-2 px-2">Status</th>
+          <th class="py-2 px-2">Attempts</th>
+          <th class="py-2 px-2">Generated</th>
+          <th class="py-2 px-2">Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for idea in ideas %}
+        <tr class="border-t border-gray-700 hover:bg-gray-700">
+          <td class="py-2 px-2">{{ idea.id }}</td>
+          <td class="py-2 px-2">{{ idea.language }}</td>
+          <td class="py-2 px-2">{{ idea.module_name }}</td>
+          <td class="py-2 px-2 mono">{{ idea.filename }}</td>
+          <td class="py-2 px-2">{{ idea.status }}</td>
+          <td class="py-2 px-2">{{ idea.generation_attempts }}</td>
+          <td class="py-2 px-2">{{ idea.generated_at or "" }}</td>
+          <td class="py-2 px-2">
+            {% if idea.generated_path %}
+              <a class="text-blue-400 hover:underline" href="{{ request.scope.root_path }}/code-ideas/file/{{ idea.id }}" target="_blank">View File</a>
+            {% else %}
+              <span class="text-gray-500">None</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -3,7 +3,7 @@ load_dotenv()
 
 import os
 from fastapi import FastAPI, Form, Request, HTTPException, Body, Depends
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse,HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from typing import Optional
 from model_runner import AVAILABLE_MODELS
 from auth_utils import verify_password, require_login, require_api_auth
+from codeideas_db import list_code_ideas, get_code_idea
 
 from memory import (
     add_message,
@@ -229,6 +230,43 @@ templates.env.filters["local_time"] = local_time
 async def chat_ui(request: Request):
     require_login(request)
     return templates.TemplateResponse("jobs.html", {"request": request, "now": lambda: datetime.now(LOCAL_TZ)})
+
+@app.get("/code-ideas", response_class=HTMLResponse)
+async def code_ideas_page(request: Request):
+    require_login(request)
+    ideas = list_code_ideas(limit=300)
+    return templates.TemplateResponse(
+        "code_ideas.html",
+        {
+            "request": request,
+            "ideas": ideas,
+            "now": lambda: datetime.now(LOCAL_TZ),
+        },
+    )
+
+@app.get("/code-ideas/file/{idea_id}")
+async def code_idea_file(request: Request, idea_id: int):
+    require_login(request)
+
+    idea = get_code_idea(idea_id)
+    if not idea or not idea.get("generated_path"):
+        raise HTTPException(status_code=404, detail="Generated file not found.")
+
+    base_dir = os.getenv("CODEIDEAS_BASE_DIR", "/mnt/ai_data/CodeIdeas")
+    file_path = os.path.realpath(idea["generated_path"])
+    safe_base = os.path.realpath(base_dir)
+
+    if not file_path.startswith(safe_base + os.sep):
+        raise HTTPException(status_code=403, detail="Invalid file path.")
+
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File does not exist on disk.")
+
+    return FileResponse(
+        file_path,
+        filename=os.path.basename(file_path),
+        media_type="text/plain",
+    )
 
 @app.get("/conversations", response_class=HTMLResponse)
 async def conversations_page(request: Request):
