@@ -15,16 +15,50 @@ def get_codeideas_connection():
         autocommit=True,
     )
 
-def list_code_ideas(limit=200):
+def list_code_ideas(limit=200, status=None, language=None, difficulty=None, search=None):
     conn = get_codeideas_connection()
     try:
+        where = []
+        params = []
+
+        if status:
+            where.append("status = %s")
+            params.append(status)
+
+        if language:
+            where.append("language = %s")
+            params.append(language)
+
+        if difficulty:
+            where.append("difficulty = %s")
+            params.append(difficulty)
+
+        if search:
+            where.append("""
+                (
+                    module_name LIKE %s OR
+                    filename LIKE %s OR
+                    purpose LIKE %s OR
+                    category LIKE %s
+                )
+            """)
+            term = f"%{search}%"
+            params.extend([term, term, term, term])
+
+        where_sql = "WHERE " + " AND ".join(where) if where else ""
+
+        sql = f"""
+            SELECT *
+            FROM code_ideas
+            {where_sql}
+            ORDER BY created_at DESC
+            LIMIT %s
+        """
+
+        params.append(limit)
+
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT *
-                FROM code_ideas
-                ORDER BY created_at DESC
-                LIMIT %s
-            """, (limit,))
+            cur.execute(sql, params)
             return cur.fetchall()
     finally:
         conn.close()

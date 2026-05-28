@@ -232,14 +232,32 @@ async def chat_ui(request: Request):
     return templates.TemplateResponse("jobs.html", {"request": request, "now": lambda: datetime.now(LOCAL_TZ)})
 
 @app.get("/code-ideas", response_class=HTMLResponse)
-async def code_ideas_page(request: Request):
+async def code_ideas_page(
+    request: Request,
+    status: Optional[str] = None,
+    language: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    search: Optional[str] = None,
+):
     require_login(request)
-    ideas = list_code_ideas(limit=300)
+
+    ideas = list_code_ideas(
+        limit=300,
+        status=status,
+        language=language,
+        difficulty=difficulty,
+        search=search,
+    )
+
     return templates.TemplateResponse(
         "code_ideas.html",
         {
             "request": request,
             "ideas": ideas,
+            "status": status or "",
+            "language": language or "",
+            "difficulty": difficulty or "",
+            "search": search or "",
             "now": lambda: datetime.now(LOCAL_TZ),
         },
     )
