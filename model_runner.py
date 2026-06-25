@@ -256,12 +256,6 @@ def run_model(
         "max_tokens": max_tokens_final,
     }
     
-    # Qwen3 / thinking-mode control
-    chat_template_kwargs = s.get("chat_template_kwargs")
-	
-    if isinstance(chat_template_kwargs, dict):
-        params["chat_template_kwargs"] = chat_template_kwargs
-
     # optional typical_p
     try:
         typical_p = os.getenv("LLM_TYPICAL_P", str(s.get("typical_p", 0.97)))
