@@ -475,8 +475,8 @@ def run_model(
 
     out = (text or "").strip()
 
-	# Safety cleanup for Qwen-style thinking blocks
-	out = re.sub(r"(?is)<think>.*?</think>\s*", "", out).strip()
+    # Safety cleanup for Qwen-style thinking blocks
+    out = re.sub(r"(?is)<think>.*?</think>\s*", "", out).strip()
 
     # ---- usage logging ----
     usage = response.get("usage") or {}
