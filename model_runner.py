@@ -2,6 +2,7 @@ import os
 import json
 import gc
 import logging
+import re
 from typing import List, Dict, Any, Optional
 
 from llama_cpp import Llama, LlamaGrammar
@@ -254,6 +255,12 @@ def run_model(
         ),
         "max_tokens": max_tokens_final,
     }
+    
+    # Qwen3 / thinking-mode control
+	chat_template_kwargs = s.get("chat_template_kwargs")
+	
+	if isinstance(chat_template_kwargs, dict):
+	    params["chat_template_kwargs"] = chat_template_kwargs
 
     # optional typical_p
     try:
@@ -467,6 +474,9 @@ def run_model(
         text = choice.get("text", "")
 
     out = (text or "").strip()
+
+	# Safety cleanup for Qwen-style thinking blocks
+	out = re.sub(r"(?is)<think>.*?</think>\s*", "", out).strip()
 
     # ---- usage logging ----
     usage = response.get("usage") or {}
