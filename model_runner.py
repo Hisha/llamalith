@@ -25,7 +25,7 @@ if os.path.exists(CONFIG_PATH):
     MODEL_SETTINGS = cfg.get("model_settings", {}) or {}
     AVAILABLE_MODELS = cfg.get("available_models", []) or sorted(MODEL_PATHS.keys())
 else:
-    AVAILABLE_MODELS = ["gemma4", "mistral", "mythomax", "openchat"]
+    AVAILABLE_MODELS = ["gemma4", "mistral", "mythomax", "openchat", "qwen3"]
 
     MODEL_PATHS = {
         "gemma4": os.getenv(
@@ -44,6 +44,10 @@ else:
             "OPENCHAT_PATH",
             "models/openchat/openchat-3.5-1210.Q8_0.gguf",
         ),
+        "qwen3": os.getenv(
+			"QWEN3_PATH",
+			"models/qwen3/Qwen3-8B-Q4_K_M.gguf",
+		),
     }
 
     MODEL_FORMATS = {
@@ -51,6 +55,7 @@ else:
         "mistral": "mistral-instruct",
         "mythomax": "chatml",
         "openchat": "chatml",
+        "qwen3": "auto",
     }
 
     MODEL_SETTINGS = {}
